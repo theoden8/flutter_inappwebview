@@ -1,5 +1,8 @@
 ## 1.2.0-beta.3
 
+- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData`) via `androidx.webkit.ProfileStore`
+- Implemented `InAppWebViewSettings.containerId` via `WebViewCompat.setProfile` (requires `WebViewFeature.MULTI_PROFILE`, System WebView 119+)
+- `MyCookieManager` methods taking a `webViewId` use the cookie jar of that WebView's container, and `flush` also flushes every container
 - Updated flutter_inappwebview_platform_interface version to ^1.4.0-beta.3
 - Updated native dependencies:
   - implementation from `'androidx.webkit:webkit:1.12.0'` to `'androidx.webkit:webkit:1.14.0'`
