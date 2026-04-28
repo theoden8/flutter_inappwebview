@@ -1,5 +1,7 @@
 ## 6.2.0-beta.3
 
+- Added `ContainerController` for enumerating, clearing and deleting named storage containers
+- Added `containerId` and `proxySettings` properties to `InAppWebViewSettings`
 - Added Linux support
 - Updated dependencies to the latest versions for all platform implementations:
   - `flutter_inappwebview_platform_interface`: `^1.4.0-beta.2` -> `^1.4.0-beta.3`
@@ -17,6 +19,9 @@
 - Minimum Flutter SDK `>=3.32.0`
 
 #### Platform Interface
+- Added `PlatformContainerController` class
+- Added `containerId` and `proxySettings` properties to `InAppWebViewSettings`
+- Added `WebViewFeature.MULTI_PROFILE`
 - Updated `flutter_inappwebview_internal_annotations` dependency from `^1.2.0` to `^1.3.0`
 - Added `isClassSupported`, `isPropertySupported`, `isMethodSupported` static methods for all main classes, such as `PlatformInAppWebViewController`, `InAppWebViewSettings`, `PlatformInAppBrowser`, etc., in order to check if a class, property, or method is supported by the platform at runtime
 - Added `isSupported` method to all custom enum classes
@@ -28,6 +33,8 @@
 - Deprecated `onReceivedIcon` in favor of `onFaviconChanged`
 
 #### Android Platform
+- Implemented `PlatformContainerController` and `InAppWebViewSettings.containerId` via `androidx.webkit.Profile` (System WebView 119+)
+- `CookieManager` methods taking a `webViewId` use the cookie jar of that WebView's container, and `flush` also flushes every container
 - Updated native dependencies:
   - implementation from `'androidx.webkit:webkit:1.12.0'` to `'androidx.webkit:webkit:1.14.0'`
   - implementation from `'androidx.browser:browser:1.8.0'` to `'androidx.browser:browser:1.9.0'`
@@ -48,6 +55,8 @@
 - Merged "fix #2484, Remove not-empty assert for Cookie.value" [#2486](https://github.com/pichillilorenzo/flutter_inappwebview/pull/2486) (thanks to [laishere](https://github.com/laishere))
 
 #### macOS and iOS Platforms
+- Implemented `PlatformContainerController`, `InAppWebViewSettings.containerId` and `InAppWebViewSettings.proxySettings` on iOS 17+ / macOS 14+ via `WKWebsiteDataStore(forIdentifier:)`
+- `CookieManager` methods taking a `webViewId` use the cookie store of that WebView's container
 - Implemented `saveState`, `restoreState` InAppWebViewController methods
 - Implemented `PlatformProxyController` class
 - Add Swift Package Manager support [#2409](https://github.com/pichillilorenzo/flutter_inappwebview/issues/2409)
