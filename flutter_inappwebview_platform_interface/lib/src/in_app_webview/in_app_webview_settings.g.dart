@@ -353,6 +353,38 @@ class InAppWebViewSettings {
   @Deprecated('Use CookieManager.removeSessionCookies instead')
   bool? clearSessionCache;
 
+  ///Persistent per-WebView profile identifier. When set, this WebView is
+  ///bound at construction time to a named, isolated data store: cookies,
+  ///`localStorage`, IndexedDB, ServiceWorkers and the HTTP cache live in
+  ///their own partition rather than the shared default store. The same
+  ///identifier reused across app launches re-attaches to the same data
+  ///on disk; reused across multiple WebView instances they share state
+  ///with each other while staying isolated from other profiles.
+  ///
+  ///The data-store binding happens before the underlying native WebView
+  ///is created; mutating this field after construction has no effect.
+  ///Calls through [PlatformInAppWebViewController.setSettings] will
+  ///silently ignore the new value for this property.
+  ///
+  ///[incognito] always wins: when [incognito] is `true`, this field is
+  ///ignored and a non-persistent (in-memory) store is used instead.
+  ///
+  ///Cookie operations performed through [PlatformCookieManager] on a
+  ///profile-bound WebView are automatically routed to that profile's
+  ///cookie jar; pass the [PlatformInAppWebViewController] via
+  ///`webViewController:` so the platform can resolve the right store.
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- Android WebView ([Official API - WebViewCompat.setProfile](https://developer.android.com/reference/androidx/webkit/WebViewCompat#setProfile(android.webkit.WebView,java.lang.String))):
+  ///    - Honored only when WebViewFeature.MULTI_PROFILE is supported (System WebView 119+). On unsupported devices the field is ignored and the WebView falls back to the default profile.
+  ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
+  ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on iOS <17.
+  ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
+  ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on macOS <14.
+  ///- Linux WPE WebKit ([Official API - WebKitNetworkSession](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)):
+  ///    - Requires WPE WebKit 2.40+. The session's data and cache directories are derived from XDG_DATA_HOME and XDG_CACHE_HOME (`<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/data` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/cache`). Sessions are cached process-wide by id so multiple WebViews joining the same container share state. Ignored on WPE WebKit <2.40.
+  String? containerId;
+
   ///List of [ContentBlocker] that are a set of rules used to block content in the browser window.
   ///
   ///**Officially Supported Platforms/Implementations**:
@@ -1529,6 +1561,39 @@ class InAppWebViewSettings {
   ///- macOS WKWebView 10.15+ ([Official API - WKWebpagePreferences.preferredContentMode](https://developer.apple.com/documentation/webkit/wkwebpagepreferences/3194426-preferredcontentmode/))
   UserPreferredContentMode? preferredContentMode;
 
+  ///Per-WebView proxy configuration, scoped to the WebView's data store
+  ///rather than the process-wide default set via
+  ///[PlatformProxyController.setProxyOverride]. When [containerId] is also
+  ///set, the proxy is attached to that profile's data store, so each
+  ///profile can have its own proxy without affecting other WebViews.
+  ///
+  ///On iOS 17+ / macOS 14+ this is attached to the WebView's data store via
+  ///[`WKWebsiteDataStore.proxyConfigurations`](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations).
+  ///On Linux it is attached to the container's
+  ///[`WebKitNetworkSession`](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)
+  ///before that session is created, so the proxy is in place before the
+  ///container's first request, and a container carrying its own proxy is
+  ///left alone by [PlatformProxyController.setProxyOverride].
+  ///
+  ///Every platform that honors this scopes the proxy to a storage session
+  ///rather than to a WebView, so a proxy is only really per-WebView when
+  ///[containerId] gives that WebView a session of its own. Without a
+  ///[containerId] the WebView shares the default session with every other
+  ///one, and on Linux such a value is ignored rather than applied to that
+  ///shared session.
+  ///
+  ///On older OS versions, and on Android / Windows / Web, the field is
+  ///ignored — there is no native API there to scope a proxy to a single
+  ///storage session. Use [PlatformProxyController.setProxyOverride] for a
+  ///process-wide proxy on those platforms.
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
+  ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
+  ///- Linux WPE WebKit ([Official API - webkit_network_session_set_proxy_settings](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.NetworkSession.set_proxy_settings.html)):
+  ///    - Requires WPE WebKit 2.40+ and a containerId: WPE scopes a proxy to a WebKitNetworkSession and only a container owns one, so a WebView without a containerId shares the default session and its value is ignored rather than applied there. A container with its own proxy is excluded from PlatformProxyController.setProxyOverride's fan-out.
+  ProxySettings? proxySettings;
+
   ///Regular expression used on native side by the [PlatformWebViewCreationParams.shouldOverrideUrlLoading]
   ///event to allow navigation requests synchronously.
   ///If the url request match the regular expression, then the request is allowed automatically,
@@ -2030,6 +2095,8 @@ class InAppWebViewSettings {
     this.interceptOnlyAsyncAjaxRequests = true,
     this.useShouldInterceptFetchRequest,
     this.incognito = false,
+    this.containerId,
+    this.proxySettings,
     this.cacheEnabled = true,
     this.transparentBackground = false,
     this.disableVerticalScroll = false,
@@ -2251,6 +2318,7 @@ class InAppWebViewSettings {
           : null,
       alpha: map['alpha'],
       appCachePath: map['appCachePath'],
+      containerId: map['containerId'],
       corsAllowlist: map['corsAllowlist'] != null
           ? List<String>.from(map['corsAllowlist']!.cast<String>())
           : null,
@@ -2393,6 +2461,10 @@ class InAppWebViewSettings {
               map['pluginScriptsOriginAllowList']!.cast<String>(),
             )
           : null,
+      proxySettings: ProxySettings.fromMap(
+        map['proxySettings']?.cast<String, dynamic>(),
+        enumMethod: enumMethod,
+      ),
       regexToAllowSyncUrlLoading: map['regexToAllowSyncUrlLoading'],
       regexToCancelSubFramesLoading: map['regexToCancelSubFramesLoading'],
       rendererPriorityPolicy: RendererPriorityPolicy.fromMap(
@@ -2735,6 +2807,7 @@ class InAppWebViewSettings {
       },
       "clearCache": clearCache,
       "clearSessionCache": clearSessionCache,
+      "containerId": containerId,
       "contentBlockers": contentBlockers
           ?.map((e) => e.toMap(enumMethod: enumMethod))
           .toList(),
@@ -2932,6 +3005,7 @@ class InAppWebViewSettings {
         EnumMethod.value => preferredContentMode?.toValue(),
         EnumMethod.name => preferredContentMode?.name(),
       },
+      "proxySettings": proxySettings?.toMap(enumMethod: enumMethod),
       "regexToAllowSyncUrlLoading": regexToAllowSyncUrlLoading,
       "regexToCancelSubFramesLoading": regexToCancelSubFramesLoading,
       "rendererPriorityPolicy": rendererPriorityPolicy?.toMap(
@@ -3012,7 +3086,7 @@ class InAppWebViewSettings {
 
   @override
   String toString() {
-    return 'InAppWebViewSettings{accessibilityIgnoresInvertColors: $accessibilityIgnoresInvertColors, algorithmicDarkeningAllowed: $algorithmicDarkeningAllowed, allowBackgroundAudioPlaying: $allowBackgroundAudioPlaying, allowContentAccess: $allowContentAccess, allowFileAccess: $allowFileAccess, allowFileAccessFromFileURLs: $allowFileAccessFromFileURLs, allowModalDialogs: $allowModalDialogs, allowTopNavigationToDataUrls: $allowTopNavigationToDataUrls, allowUniversalAccessFromFileURLs: $allowUniversalAccessFromFileURLs, allowingReadAccessTo: $allowingReadAccessTo, allowsAirPlayForMediaPlayback: $allowsAirPlayForMediaPlayback, allowsBackForwardNavigationGestures: $allowsBackForwardNavigationGestures, allowsInlineMediaPlayback: $allowsInlineMediaPlayback, allowsLinkPreview: $allowsLinkPreview, allowsPictureInPictureMediaPlayback: $allowsPictureInPictureMediaPlayback, alpha: $alpha, alwaysBounceHorizontal: $alwaysBounceHorizontal, alwaysBounceVertical: $alwaysBounceVertical, appCachePath: $appCachePath, applePayAPIEnabled: $applePayAPIEnabled, applicationNameForUserAgent: $applicationNameForUserAgent, automaticallyAdjustsScrollIndicatorInsets: $automaticallyAdjustsScrollIndicatorInsets, blockNetworkImage: $blockNetworkImage, blockNetworkLoads: $blockNetworkLoads, browserAcceleratorKeysEnabled: $browserAcceleratorKeysEnabled, builtInZoomControls: $builtInZoomControls, cacheEnabled: $cacheEnabled, cacheMode: $cacheMode, contentBlockers: $contentBlockers, contentInsetAdjustmentBehavior: $contentInsetAdjustmentBehavior, corsAllowlist: $corsAllowlist, cursiveFontFamily: $cursiveFontFamily, cursorBlinkTime: $cursorBlinkTime, darkMode: $darkMode, dataDetectorTypes: $dataDetectorTypes, databaseEnabled: $databaseEnabled, decelerationRate: $decelerationRate, defaultFixedFontSize: $defaultFixedFontSize, defaultFontSize: $defaultFontSize, defaultTextEncodingName: $defaultTextEncodingName, defaultVideoPoster: $defaultVideoPoster, disableAnimations: $disableAnimations, disableContextMenu: $disableContextMenu, disableDefaultErrorPage: $disableDefaultErrorPage, disableHorizontalScroll: $disableHorizontalScroll, disableInputAccessoryView: $disableInputAccessoryView, disableLongPressContextMenuOnLinks: $disableLongPressContextMenuOnLinks, disableVerticalScroll: $disableVerticalScroll, disableWebSecurity: $disableWebSecurity, disabledActionModeMenuItems: $disabledActionModeMenuItems, disallowOverScroll: $disallowOverScroll, displayZoomControls: $displayZoomControls, domStorageEnabled: $domStorageEnabled, doubleClickDistance: $doubleClickDistance, doubleClickTime: $doubleClickTime, dragThreshold: $dragThreshold, drawCompositingIndicators: $drawCompositingIndicators, enable2DCanvasAcceleration: $enable2DCanvasAcceleration, enableCaretBrowsing: $enableCaretBrowsing, enableEncryptedMedia: $enableEncryptedMedia, enableJavaScriptMarkup: $enableJavaScriptMarkup, enableMedia: $enableMedia, enableMediaCapabilities: $enableMediaCapabilities, enableMockCaptureDevices: $enableMockCaptureDevices, enablePageCache: $enablePageCache, enableResizableTextAreas: $enableResizableTextAreas, enableSmoothScrolling: $enableSmoothScrolling, enableSpatialNavigation: $enableSpatialNavigation, enableTabsToLinks: $enableTabsToLinks, enableViewportScale: $enableViewportScale, enableWebRTC: $enableWebRTC, enableWriteConsoleMessagesToStdout: $enableWriteConsoleMessagesToStdout, enterpriseAuthenticationAppLinkPolicyEnabled: $enterpriseAuthenticationAppLinkPolicyEnabled, fantasyFontFamily: $fantasyFontFamily, fixedFontFamily: $fixedFontFamily, fontAntialias: $fontAntialias, fontDPI: $fontDPI, fontHintingStyle: $fontHintingStyle, fontSubpixelLayout: $fontSubpixelLayout, generalAutofillEnabled: $generalAutofillEnabled, geolocationEnabled: $geolocationEnabled, handleAcceleratorKeyPressed: $handleAcceleratorKeyPressed, hardwareAcceleration: $hardwareAcceleration, hiddenPdfToolbarItems: $hiddenPdfToolbarItems, horizontalScrollBarEnabled: $horizontalScrollBarEnabled, horizontalScrollbarThumbColor: $horizontalScrollbarThumbColor, horizontalScrollbarTrackColor: $horizontalScrollbarTrackColor, iframeAllow: $iframeAllow, iframeAllowFullscreen: $iframeAllowFullscreen, iframeAriaHidden: $iframeAriaHidden, iframeCsp: $iframeCsp, iframeName: $iframeName, iframeReferrerPolicy: $iframeReferrerPolicy, iframeRole: $iframeRole, iframeSandbox: $iframeSandbox, ignoresViewportScaleLimits: $ignoresViewportScaleLimits, incognito: $incognito, initialScale: $initialScale, interceptOnlyAsyncAjaxRequests: $interceptOnlyAsyncAjaxRequests, isDirectionalLockEnabled: $isDirectionalLockEnabled, isElementFullscreenEnabled: $isElementFullscreenEnabled, isFindInteractionEnabled: $isFindInteractionEnabled, isFraudulentWebsiteWarningEnabled: $isFraudulentWebsiteWarningEnabled, isInspectable: $isInspectable, isPagingEnabled: $isPagingEnabled, isSiteSpecificQuirksModeEnabled: $isSiteSpecificQuirksModeEnabled, isTextInteractionEnabled: $isTextInteractionEnabled, isUserInteractionEnabled: $isUserInteractionEnabled, itpEnabled: $itpEnabled, javaScriptBridgeEnabled: $javaScriptBridgeEnabled, javaScriptBridgeForMainFrameOnly: $javaScriptBridgeForMainFrameOnly, javaScriptBridgeOriginAllowList: $javaScriptBridgeOriginAllowList, javaScriptCanAccessClipboard: $javaScriptCanAccessClipboard, javaScriptCanOpenWindowsAutomatically: $javaScriptCanOpenWindowsAutomatically, javaScriptEnabled: $javaScriptEnabled, javaScriptHandlersForMainFrameOnly: $javaScriptHandlersForMainFrameOnly, javaScriptHandlersOriginAllowList: $javaScriptHandlersOriginAllowList, keyRepeatDelay: $keyRepeatDelay, keyRepeatInterval: $keyRepeatInterval, layoutAlgorithm: $layoutAlgorithm, limitsNavigationsToAppBoundDomains: $limitsNavigationsToAppBoundDomains, loadWithOverviewMode: $loadWithOverviewMode, loadsImagesAutomatically: $loadsImagesAutomatically, maximumViewportInset: $maximumViewportInset, maximumZoomScale: $maximumZoomScale, mediaContentTypesRequiringHardwareSupport: $mediaContentTypesRequiringHardwareSupport, mediaPlaybackRequiresUserGesture: $mediaPlaybackRequiresUserGesture, mediaType: $mediaType, minimumFontSize: $minimumFontSize, minimumLogicalFontSize: $minimumLogicalFontSize, minimumViewportInset: $minimumViewportInset, minimumZoomScale: $minimumZoomScale, mixedContentMode: $mixedContentMode, needInitialFocus: $needInitialFocus, networkAvailable: $networkAvailable, nonClientRegionSupportEnabled: $nonClientRegionSupportEnabled, offscreenPreRaster: $offscreenPreRaster, overScrollMode: $overScrollMode, pageZoom: $pageZoom, passwordAutosaveEnabled: $passwordAutosaveEnabled, pictographFontFamily: $pictographFontFamily, pinchZoomEnabled: $pinchZoomEnabled, pluginScriptsForMainFrameOnly: $pluginScriptsForMainFrameOnly, pluginScriptsOriginAllowList: $pluginScriptsOriginAllowList, preferredContentMode: $preferredContentMode, regexToAllowSyncUrlLoading: $regexToAllowSyncUrlLoading, regexToCancelSubFramesLoading: $regexToCancelSubFramesLoading, rendererPriorityPolicy: $rendererPriorityPolicy, reputationCheckingRequired: $reputationCheckingRequired, requestedWithHeaderOriginAllowList: $requestedWithHeaderOriginAllowList, resourceCustomSchemes: $resourceCustomSchemes, safeBrowsingEnabled: $safeBrowsingEnabled, sansSerifFontFamily: $sansSerifFontFamily, scrollBarDefaultDelayBeforeFade: $scrollBarDefaultDelayBeforeFade, scrollBarFadeDuration: $scrollBarFadeDuration, scrollBarStyle: $scrollBarStyle, scrollMultiplier: $scrollMultiplier, scrollbarFadingEnabled: $scrollbarFadingEnabled, scrollsToTop: $scrollsToTop, selectionGranularity: $selectionGranularity, serifFontFamily: $serifFontFamily, sharedCookiesEnabled: $sharedCookiesEnabled, shouldPrintBackgrounds: $shouldPrintBackgrounds, standardFontFamily: $standardFontFamily, statusBarEnabled: $statusBarEnabled, supportMultipleWindows: $supportMultipleWindows, supportZoom: $supportZoom, suppressesIncrementalRendering: $suppressesIncrementalRendering, textZoom: $textZoom, thirdPartyCookiesEnabled: $thirdPartyCookiesEnabled, transparentBackground: $transparentBackground, underPageBackgroundColor: $underPageBackgroundColor, upgradeKnownHostsToHTTPS: $upgradeKnownHostsToHTTPS, useHybridComposition: $useHybridComposition, useOnAjaxProgress: $useOnAjaxProgress, useOnAjaxReadyStateChange: $useOnAjaxReadyStateChange, useOnDownloadStart: $useOnDownloadStart, useOnLoadResource: $useOnLoadResource, useOnNavigationResponse: $useOnNavigationResponse, useOnRenderProcessGone: $useOnRenderProcessGone, useOnShowFileChooser: $useOnShowFileChooser, useShouldInterceptAjaxRequest: $useShouldInterceptAjaxRequest, useShouldInterceptFetchRequest: $useShouldInterceptFetchRequest, useShouldInterceptRequest: $useShouldInterceptRequest, useShouldOverrideUrlLoading: $useShouldOverrideUrlLoading, useWideViewPort: $useWideViewPort, userAgent: $userAgent, verticalScrollBarEnabled: $verticalScrollBarEnabled, verticalScrollbarPosition: $verticalScrollbarPosition, verticalScrollbarThumbColor: $verticalScrollbarThumbColor, verticalScrollbarTrackColor: $verticalScrollbarTrackColor, webRTCUdpPortsRange: $webRTCUdpPortsRange, webViewAssetLoader: $webViewAssetLoader}';
+    return 'InAppWebViewSettings{accessibilityIgnoresInvertColors: $accessibilityIgnoresInvertColors, algorithmicDarkeningAllowed: $algorithmicDarkeningAllowed, allowBackgroundAudioPlaying: $allowBackgroundAudioPlaying, allowContentAccess: $allowContentAccess, allowFileAccess: $allowFileAccess, allowFileAccessFromFileURLs: $allowFileAccessFromFileURLs, allowModalDialogs: $allowModalDialogs, allowTopNavigationToDataUrls: $allowTopNavigationToDataUrls, allowUniversalAccessFromFileURLs: $allowUniversalAccessFromFileURLs, allowingReadAccessTo: $allowingReadAccessTo, allowsAirPlayForMediaPlayback: $allowsAirPlayForMediaPlayback, allowsBackForwardNavigationGestures: $allowsBackForwardNavigationGestures, allowsInlineMediaPlayback: $allowsInlineMediaPlayback, allowsLinkPreview: $allowsLinkPreview, allowsPictureInPictureMediaPlayback: $allowsPictureInPictureMediaPlayback, alpha: $alpha, alwaysBounceHorizontal: $alwaysBounceHorizontal, alwaysBounceVertical: $alwaysBounceVertical, appCachePath: $appCachePath, applePayAPIEnabled: $applePayAPIEnabled, applicationNameForUserAgent: $applicationNameForUserAgent, automaticallyAdjustsScrollIndicatorInsets: $automaticallyAdjustsScrollIndicatorInsets, blockNetworkImage: $blockNetworkImage, blockNetworkLoads: $blockNetworkLoads, browserAcceleratorKeysEnabled: $browserAcceleratorKeysEnabled, builtInZoomControls: $builtInZoomControls, cacheEnabled: $cacheEnabled, cacheMode: $cacheMode, containerId: $containerId, contentBlockers: $contentBlockers, contentInsetAdjustmentBehavior: $contentInsetAdjustmentBehavior, corsAllowlist: $corsAllowlist, cursiveFontFamily: $cursiveFontFamily, cursorBlinkTime: $cursorBlinkTime, darkMode: $darkMode, dataDetectorTypes: $dataDetectorTypes, databaseEnabled: $databaseEnabled, decelerationRate: $decelerationRate, defaultFixedFontSize: $defaultFixedFontSize, defaultFontSize: $defaultFontSize, defaultTextEncodingName: $defaultTextEncodingName, defaultVideoPoster: $defaultVideoPoster, disableAnimations: $disableAnimations, disableContextMenu: $disableContextMenu, disableDefaultErrorPage: $disableDefaultErrorPage, disableHorizontalScroll: $disableHorizontalScroll, disableInputAccessoryView: $disableInputAccessoryView, disableLongPressContextMenuOnLinks: $disableLongPressContextMenuOnLinks, disableVerticalScroll: $disableVerticalScroll, disableWebSecurity: $disableWebSecurity, disabledActionModeMenuItems: $disabledActionModeMenuItems, disallowOverScroll: $disallowOverScroll, displayZoomControls: $displayZoomControls, domStorageEnabled: $domStorageEnabled, doubleClickDistance: $doubleClickDistance, doubleClickTime: $doubleClickTime, dragThreshold: $dragThreshold, drawCompositingIndicators: $drawCompositingIndicators, enable2DCanvasAcceleration: $enable2DCanvasAcceleration, enableCaretBrowsing: $enableCaretBrowsing, enableEncryptedMedia: $enableEncryptedMedia, enableJavaScriptMarkup: $enableJavaScriptMarkup, enableMedia: $enableMedia, enableMediaCapabilities: $enableMediaCapabilities, enableMockCaptureDevices: $enableMockCaptureDevices, enablePageCache: $enablePageCache, enableResizableTextAreas: $enableResizableTextAreas, enableSmoothScrolling: $enableSmoothScrolling, enableSpatialNavigation: $enableSpatialNavigation, enableTabsToLinks: $enableTabsToLinks, enableViewportScale: $enableViewportScale, enableWebRTC: $enableWebRTC, enableWriteConsoleMessagesToStdout: $enableWriteConsoleMessagesToStdout, enterpriseAuthenticationAppLinkPolicyEnabled: $enterpriseAuthenticationAppLinkPolicyEnabled, fantasyFontFamily: $fantasyFontFamily, fixedFontFamily: $fixedFontFamily, fontAntialias: $fontAntialias, fontDPI: $fontDPI, fontHintingStyle: $fontHintingStyle, fontSubpixelLayout: $fontSubpixelLayout, generalAutofillEnabled: $generalAutofillEnabled, geolocationEnabled: $geolocationEnabled, handleAcceleratorKeyPressed: $handleAcceleratorKeyPressed, hardwareAcceleration: $hardwareAcceleration, hiddenPdfToolbarItems: $hiddenPdfToolbarItems, horizontalScrollBarEnabled: $horizontalScrollBarEnabled, horizontalScrollbarThumbColor: $horizontalScrollbarThumbColor, horizontalScrollbarTrackColor: $horizontalScrollbarTrackColor, iframeAllow: $iframeAllow, iframeAllowFullscreen: $iframeAllowFullscreen, iframeAriaHidden: $iframeAriaHidden, iframeCsp: $iframeCsp, iframeName: $iframeName, iframeReferrerPolicy: $iframeReferrerPolicy, iframeRole: $iframeRole, iframeSandbox: $iframeSandbox, ignoresViewportScaleLimits: $ignoresViewportScaleLimits, incognito: $incognito, initialScale: $initialScale, interceptOnlyAsyncAjaxRequests: $interceptOnlyAsyncAjaxRequests, isDirectionalLockEnabled: $isDirectionalLockEnabled, isElementFullscreenEnabled: $isElementFullscreenEnabled, isFindInteractionEnabled: $isFindInteractionEnabled, isFraudulentWebsiteWarningEnabled: $isFraudulentWebsiteWarningEnabled, isInspectable: $isInspectable, isPagingEnabled: $isPagingEnabled, isSiteSpecificQuirksModeEnabled: $isSiteSpecificQuirksModeEnabled, isTextInteractionEnabled: $isTextInteractionEnabled, isUserInteractionEnabled: $isUserInteractionEnabled, itpEnabled: $itpEnabled, javaScriptBridgeEnabled: $javaScriptBridgeEnabled, javaScriptBridgeForMainFrameOnly: $javaScriptBridgeForMainFrameOnly, javaScriptBridgeOriginAllowList: $javaScriptBridgeOriginAllowList, javaScriptCanAccessClipboard: $javaScriptCanAccessClipboard, javaScriptCanOpenWindowsAutomatically: $javaScriptCanOpenWindowsAutomatically, javaScriptEnabled: $javaScriptEnabled, javaScriptHandlersForMainFrameOnly: $javaScriptHandlersForMainFrameOnly, javaScriptHandlersOriginAllowList: $javaScriptHandlersOriginAllowList, keyRepeatDelay: $keyRepeatDelay, keyRepeatInterval: $keyRepeatInterval, layoutAlgorithm: $layoutAlgorithm, limitsNavigationsToAppBoundDomains: $limitsNavigationsToAppBoundDomains, loadWithOverviewMode: $loadWithOverviewMode, loadsImagesAutomatically: $loadsImagesAutomatically, maximumViewportInset: $maximumViewportInset, maximumZoomScale: $maximumZoomScale, mediaContentTypesRequiringHardwareSupport: $mediaContentTypesRequiringHardwareSupport, mediaPlaybackRequiresUserGesture: $mediaPlaybackRequiresUserGesture, mediaType: $mediaType, minimumFontSize: $minimumFontSize, minimumLogicalFontSize: $minimumLogicalFontSize, minimumViewportInset: $minimumViewportInset, minimumZoomScale: $minimumZoomScale, mixedContentMode: $mixedContentMode, needInitialFocus: $needInitialFocus, networkAvailable: $networkAvailable, nonClientRegionSupportEnabled: $nonClientRegionSupportEnabled, offscreenPreRaster: $offscreenPreRaster, overScrollMode: $overScrollMode, pageZoom: $pageZoom, passwordAutosaveEnabled: $passwordAutosaveEnabled, pictographFontFamily: $pictographFontFamily, pinchZoomEnabled: $pinchZoomEnabled, pluginScriptsForMainFrameOnly: $pluginScriptsForMainFrameOnly, pluginScriptsOriginAllowList: $pluginScriptsOriginAllowList, preferredContentMode: $preferredContentMode, proxySettings: $proxySettings, regexToAllowSyncUrlLoading: $regexToAllowSyncUrlLoading, regexToCancelSubFramesLoading: $regexToCancelSubFramesLoading, rendererPriorityPolicy: $rendererPriorityPolicy, reputationCheckingRequired: $reputationCheckingRequired, requestedWithHeaderOriginAllowList: $requestedWithHeaderOriginAllowList, resourceCustomSchemes: $resourceCustomSchemes, safeBrowsingEnabled: $safeBrowsingEnabled, sansSerifFontFamily: $sansSerifFontFamily, scrollBarDefaultDelayBeforeFade: $scrollBarDefaultDelayBeforeFade, scrollBarFadeDuration: $scrollBarFadeDuration, scrollBarStyle: $scrollBarStyle, scrollMultiplier: $scrollMultiplier, scrollbarFadingEnabled: $scrollbarFadingEnabled, scrollsToTop: $scrollsToTop, selectionGranularity: $selectionGranularity, serifFontFamily: $serifFontFamily, sharedCookiesEnabled: $sharedCookiesEnabled, shouldPrintBackgrounds: $shouldPrintBackgrounds, standardFontFamily: $standardFontFamily, statusBarEnabled: $statusBarEnabled, supportMultipleWindows: $supportMultipleWindows, supportZoom: $supportZoom, suppressesIncrementalRendering: $suppressesIncrementalRendering, textZoom: $textZoom, thirdPartyCookiesEnabled: $thirdPartyCookiesEnabled, transparentBackground: $transparentBackground, underPageBackgroundColor: $underPageBackgroundColor, upgradeKnownHostsToHTTPS: $upgradeKnownHostsToHTTPS, useHybridComposition: $useHybridComposition, useOnAjaxProgress: $useOnAjaxProgress, useOnAjaxReadyStateChange: $useOnAjaxReadyStateChange, useOnDownloadStart: $useOnDownloadStart, useOnLoadResource: $useOnLoadResource, useOnNavigationResponse: $useOnNavigationResponse, useOnRenderProcessGone: $useOnRenderProcessGone, useOnShowFileChooser: $useOnShowFileChooser, useShouldInterceptAjaxRequest: $useShouldInterceptAjaxRequest, useShouldInterceptFetchRequest: $useShouldInterceptFetchRequest, useShouldInterceptRequest: $useShouldInterceptRequest, useShouldOverrideUrlLoading: $useShouldOverrideUrlLoading, useWideViewPort: $useWideViewPort, userAgent: $userAgent, verticalScrollBarEnabled: $verticalScrollBarEnabled, verticalScrollbarPosition: $verticalScrollbarPosition, verticalScrollbarThumbColor: $verticalScrollbarThumbColor, verticalScrollbarTrackColor: $verticalScrollbarTrackColor, webRTCUdpPortsRange: $webRTCUdpPortsRange, webViewAssetLoader: $webViewAssetLoader}';
   }
 }
 
@@ -3375,6 +3449,24 @@ enum InAppWebViewSettingsProperty {
   ///{@endtemplate}
   @Deprecated('Use CookieManager.removeSessionCookies instead')
   clearSessionCache,
+
+  ///Can be used to check if the [InAppWebViewSettings.containerId] property is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.InAppWebViewSettings.containerId.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- Android WebView ([Official API - WebViewCompat.setProfile](https://developer.android.com/reference/androidx/webkit/WebViewCompat#setProfile(android.webkit.WebView,java.lang.String))):
+  ///    - Honored only when WebViewFeature.MULTI_PROFILE is supported (System WebView 119+). On unsupported devices the field is ignored and the WebView falls back to the default profile.
+  ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
+  ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on iOS <17.
+  ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
+  ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on macOS <14.
+  ///- Linux WPE WebKit ([Official API - WebKitNetworkSession](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)):
+  ///    - Requires WPE WebKit 2.40+. The session's data and cache directories are derived from XDG_DATA_HOME and XDG_CACHE_HOME (`<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/data` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/cache`). Sessions are cached process-wide by id so multiple WebViews joining the same container share state. Ignored on WPE WebKit <2.40.
+  ///
+  ///Use the [InAppWebViewSettings.isPropertySupported] method to check if this property is supported at runtime.
+  ///{@endtemplate}
+  containerId,
 
   ///Can be used to check if the [InAppWebViewSettings.contentBlockers] property is supported at runtime.
   ///
@@ -4792,6 +4884,20 @@ enum InAppWebViewSettingsProperty {
   ///{@endtemplate}
   preferredContentMode,
 
+  ///Can be used to check if the [InAppWebViewSettings.proxySettings] property is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.InAppWebViewSettings.proxySettings.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
+  ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
+  ///- Linux WPE WebKit ([Official API - webkit_network_session_set_proxy_settings](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.NetworkSession.set_proxy_settings.html)):
+  ///    - Requires WPE WebKit 2.40+ and a containerId: WPE scopes a proxy to a WebKitNetworkSession and only a container owns one, so a WebView without a containerId shares the default session and its value is ignored rather than applied there. A container with its own proxy is excluded from PlatformProxyController.setProxyOverride's fan-out.
+  ///
+  ///Use the [InAppWebViewSettings.isPropertySupported] method to check if this property is supported at runtime.
+  ///{@endtemplate}
+  proxySettings,
+
   ///Can be used to check if the [InAppWebViewSettings.regexToAllowSyncUrlLoading] property is supported at runtime.
   ///
   ///{@template flutter_inappwebview_platform_interface.InAppWebViewSettings.regexToAllowSyncUrlLoading.supported_platforms}
@@ -5536,6 +5642,14 @@ extension _InAppWebViewSettingsPropertySupported on InAppWebViewSettings {
             [
               TargetPlatform.android,
             ].contains(platform ?? defaultTargetPlatform);
+      case InAppWebViewSettingsProperty.containerId:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.android,
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
+              TargetPlatform.linux,
+            ].contains(platform ?? defaultTargetPlatform);
       case InAppWebViewSettingsProperty.contentBlockers:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
             [
@@ -6124,6 +6238,13 @@ extension _InAppWebViewSettingsPropertySupported on InAppWebViewSettings {
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+            ].contains(platform ?? defaultTargetPlatform);
+      case InAppWebViewSettingsProperty.proxySettings:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case InAppWebViewSettingsProperty.regexToAllowSyncUrlLoading:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
