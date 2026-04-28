@@ -5,15 +5,60 @@
 //  Created by Lorenzo on 21/10/18.
 //
 
+import CryptoKit
 import FlutterMacOS
 import Foundation
 @preconcurrency import WebKit
+
+// Derive a stable UUID for `WKWebsiteDataStore(forIdentifier:)` from an
+// arbitrary profile-id string. Apple's API requires a UUID, but our
+// public Dart API accepts a free-form String. Hash the UTF-8 bytes with
+// SHA-256 and take the first 16 bytes. Stable across launches, builds
+// and macOS reinstalls; carries no device identity. Kept byte-identical
+// to the iOS sibling so the same id derives the same UUID on either
+// platform — useful when a user's data syncs across devices.
+// Module-internal so ContainerManager.swift can call it from the same
+// Swift module.
+@available(macOS 10.15, *)
+func containerIdToUUID(_ containerId: String) -> UUID {
+    let digest = SHA256.hash(data: Data(containerId.utf8))
+    let bytes = Array(digest.prefix(16))
+    return UUID(uuid: (
+        bytes[0], bytes[1], bytes[2], bytes[3],
+        bytes[4], bytes[5], bytes[6], bytes[7],
+        bytes[8], bytes[9], bytes[10], bytes[11],
+        bytes[12], bytes[13], bytes[14], bytes[15]
+    ))
+}
 
 public class InAppWebView: WKWebView, WKUIDelegate,
                             WKNavigationDelegate, WKScriptMessageHandler,
                             WKDownloadDelegate,
                             Disposable {
     static var METHOD_CHANNEL_NAME_PREFIX = "com.pichillilorenzo/flutter_inappwebview_"
+
+    // Registry of live InAppWebView instances. Used by MyCookieManager to
+    // resolve the per-profile WKHTTPCookieStore for cookie ops scoped to a
+    // specific WebView. NSHashTable.weakObjects holds entries weakly so
+    // dealloc removes them automatically.
+    static let liveWebViews = NSHashTable<InAppWebView>.weakObjects()
+
+    static func findById(_ webViewId: Any) -> InAppWebView? {
+        for view in liveWebViews.allObjects {
+            if let viewId = view.id, anyIdsEqual(viewId, webViewId) {
+                return view
+            }
+        }
+        return nil
+    }
+
+    private static func anyIdsEqual(_ a: Any, _ b: Any) -> Bool {
+        if let an = a as? NSNumber, let bn = b as? NSNumber {
+            return an.isEqual(bn)
+        }
+        if let as_ = a as? String, let bs = b as? String { return as_ == bs }
+        return false
+    }
 
     var id: Any? // viewId
     var plugin: InAppWebViewFlutterPlugin?
@@ -61,6 +106,7 @@ public class InAppWebView: WKWebView, WKUIDelegate,
         super.init(frame: frame, configuration: configuration)
         self.id = id
         self.plugin = plugin
+        InAppWebView.liveWebViews.add(self)
         if let id = id, let registrar = plugin?.registrar {
             let channel = FlutterMethodChannel(name: InAppWebView.METHOD_CHANNEL_NAME_PREFIX + String(describing: id),
                                            binaryMessenger: registrar.messenger)
@@ -279,6 +325,25 @@ public class InAppWebView: WKWebView, WKUIDelegate,
                 configuration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
             } else if settings.cacheEnabled {
                 configuration.websiteDataStore = WKWebsiteDataStore.default()
+            }
+            // Persistent per-WebView partitioning. Mirrors the iOS path,
+            // gated on macOS 14+. incognito wins.
+            if !settings.incognito,
+               let containerId = settings.containerId, !containerId.isEmpty,
+               #available(macOS 14.0, *) {
+                let uuid = containerIdToUUID(containerId)
+                configuration.websiteDataStore =
+                    WKWebsiteDataStore(forIdentifier: uuid)
+                ContainerManager.registerContainerBinding(containerId, uuid: uuid)
+            }
+            // Per-WebView proxy. Same shape and rationale as iOS — attach
+            // to whichever store the WebView ended up with so a profile-
+            // bound site genuinely uses its own proxy.
+            if let proxyMap = settings.proxySettings,
+               #available(macOS 14.0, *),
+               let proxy = ProxySettings.fromMap(map: proxyMap) {
+                configuration.websiteDataStore.proxyConfigurations =
+                    proxy.toProxyConfigurations()
             }
             if !settings.applicationNameForUserAgent.isEmpty {
                 if let applicationNameForUserAgent = configuration.applicationNameForUserAgent {
