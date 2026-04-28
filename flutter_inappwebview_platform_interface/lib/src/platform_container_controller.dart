@@ -1,0 +1,260 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_inappwebview_internal_annotations/flutter_inappwebview_internal_annotations.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+
+import 'inappwebview_platform.dart';
+
+part 'platform_container_controller.g.dart';
+
+///{@template flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams}
+/// Object specifying creation parameters for creating a [PlatformContainerController].
+///
+/// Platform specific implementations can add additional fields by extending
+/// this class.
+///{@endtemplate}
+@SupportedPlatforms(
+  platforms: [
+    AndroidPlatform(),
+    IOSPlatform(available: '17.0'),
+    MacOSPlatform(available: '14.0'),
+  ],
+)
+@immutable
+class PlatformContainerControllerCreationParams {
+  /// Used by the platform implementation to create a new [PlatformContainerController].
+  const PlatformContainerControllerCreationParams();
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
+  ///Check if the current class is supported by the [defaultTargetPlatform] or a specific [platform].
+  ///{@endtemplate}
+  bool isClassSupported({TargetPlatform? platform}) =>
+      _PlatformContainerControllerCreationParamsClassSupported.isClassSupported(
+        platform: platform,
+      );
+}
+
+///{@template flutter_inappwebview_platform_interface.PlatformContainerController}
+///Manages the named, persistent data partitions referenced by
+///[InAppWebViewSettings.containerId]. A profile groups its WebViews'
+///cookies, `localStorage`, IndexedDB, ServiceWorkers and HTTP cache
+///into one isolated store; multiple WebViews bound to the same
+///`containerId` share that store.
+///
+///Use this controller to enumerate the profiles a user has created
+///across app launches, check whether a given profile already exists,
+///or delete a profile and all of its associated data. Profiles are
+///materialized lazily — a new `containerId` only appears in
+///[getAllContainerNames] once a WebView has been constructed with it
+///and Apple's data store has flushed to disk; on Android the entry
+///is created eagerly by `ProfileStore.getOrCreateProfile`.
+///
+///On iOS / macOS Apple's underlying API stores data store identifiers
+///as UUIDs, not as the original `containerId` strings the app supplied.
+///This controller maintains an `id ↔ UUID` registry in
+///`UserDefaults` so [getAllContainerNames] can return the original
+///strings; the registry is updated automatically when a `containerId`
+///is bound (via [InAppWebViewSettings.containerId]) or deleted (via
+///[deleteProfile]).
+///{@endtemplate}
+@SupportedPlatforms(
+  platforms: [
+    AndroidPlatform(
+      apiName: 'ProfileStore',
+      apiUrl:
+          'https://developer.android.com/reference/androidx/webkit/ProfileStore',
+      note:
+          'Honored only when WebViewFeature.MULTI_PROFILE is supported (System WebView 110+).',
+    ),
+    IOSPlatform(
+      apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
+      apiUrl:
+          'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
+      available: '17.0',
+    ),
+    MacOSPlatform(
+      apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
+      apiUrl:
+          'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
+      available: '14.0',
+    ),
+  ],
+)
+abstract class PlatformContainerController extends PlatformInterface {
+  /// Creates a new [PlatformContainerController]
+  factory PlatformContainerController(
+    PlatformContainerControllerCreationParams params,
+  ) {
+    assert(
+      InAppWebViewPlatform.instance != null,
+      'A platform implementation for `flutter_inappwebview` has not been set. Please '
+      'ensure that an implementation of `InAppWebViewPlatform` has been set to '
+      '`WebViewPlatform.instance` before use. For unit testing, '
+      '`WebViewPlatform.instance` can be set with your own test implementation.',
+    );
+    final PlatformContainerController profileController = InAppWebViewPlatform
+        .instance!
+        .createPlatformContainerController(params);
+    PlatformInterface.verify(profileController, _token);
+    return profileController;
+  }
+
+  /// Creates a new [PlatformContainerController] to access static methods.
+  factory PlatformContainerController.static() {
+    assert(
+      InAppWebViewPlatform.instance != null,
+      'A platform implementation for `flutter_inappwebview` has not been set. Please '
+      'ensure that an implementation of `InAppWebViewPlatform` has been set to '
+      '`InAppWebViewPlatform.instance` before use. For unit testing, '
+      '`InAppWebViewPlatform.instance` can be set with your own test implementation.',
+    );
+    final PlatformContainerController profileControllerStatic =
+        InAppWebViewPlatform.instance!
+            .createPlatformContainerControllerStatic();
+    PlatformInterface.verify(profileControllerStatic, _token);
+    return profileControllerStatic;
+  }
+
+  /// Used by the platform implementation to create a new
+  /// [PlatformContainerController].
+  ///
+  /// Should only be used by platform implementations because they can't extend
+  /// a class that only contains a factory constructor.
+  @protected
+  PlatformContainerController.implementation(this.params)
+    : super(token: _token);
+
+  static final Object _token = Object();
+
+  /// The parameters used to initialize the [PlatformContainerController].
+  final PlatformContainerControllerCreationParams params;
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.getAllContainerNames}
+  ///Returns the names of all profiles known to the runtime, in
+  ///unspecified order. On Android these are the names tracked by
+  ///`ProfileStore`; on iOS / macOS they are the entries from the
+  ///plugin's UUID registry that still appear in
+  ///`WKWebsiteDataStore.allDataStoreIdentifiers` — stale registry
+  ///entries (where the underlying store has been removed out of band)
+  ///are filtered out.
+  ///
+  ///Throws [UnimplementedError] on platforms without per-profile
+  ///partitioning. Use
+  ///[PlatformContainerController.params.isClassSupported] to gate
+  ///UI that depends on listing.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName: 'ProfileStore.getAllContainerNames',
+        apiUrl:
+            'https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllContainerNames()',
+      ),
+      IOSPlatform(
+        apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
+        available: '17.0',
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
+        available: '14.0',
+      ),
+    ],
+  )
+  Future<List<String>> getAllContainerNames() {
+    throw UnimplementedError(
+      'getAllContainerNames is not implemented on the current platform',
+    );
+  }
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.hasProfile}
+  ///Returns whether a profile with [containerId] currently exists. On
+  ///iOS / macOS this checks whether the derived UUID appears in
+  ///`WKWebsiteDataStore.allDataStoreIdentifiers`; an existing
+  ///registry entry alone is not sufficient.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName: 'ProfileStore.getAllContainerNames',
+        apiUrl:
+            'https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllContainerNames()',
+      ),
+      IOSPlatform(
+        apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
+        available: '17.0',
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
+        available: '14.0',
+      ),
+    ],
+  )
+  Future<bool> hasContainer(String containerId) {
+    throw UnimplementedError(
+      'hasProfile is not implemented on the current platform',
+    );
+  }
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.deleteProfile}
+  ///Deletes the profile with [containerId] and all of its data
+  ///(cookies, `localStorage`, IndexedDB, ServiceWorkers, HTTP cache).
+  ///Returns `true` if the profile existed and was deleted, `false`
+  ///otherwise.
+  ///
+  ///Has no effect while a WebView bound to that profile is still
+  ///live: on Android `ProfileStore.deleteProfile` throws
+  ///`IllegalStateException` if any WebView is using it; on iOS /
+  ///macOS the underlying `WKWebsiteDataStore.remove(forIdentifier:)`
+  ///returns an error in that case. Dispose those WebViews first.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName: 'ProfileStore.deleteProfile',
+        apiUrl:
+            'https://developer.android.com/reference/androidx/webkit/ProfileStore#deleteContainer(java.lang.String)',
+      ),
+      IOSPlatform(
+        apiName: 'WKWebsiteDataStore.remove(forIdentifier:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove',
+        available: '17.0',
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebsiteDataStore.remove(forIdentifier:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove',
+        available: '14.0',
+      ),
+    ],
+  )
+  Future<bool> deleteContainer(String containerId) {
+    throw UnimplementedError(
+      'deleteProfile is not implemented on the current platform',
+    );
+  }
+
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
+  bool isClassSupported({TargetPlatform? platform}) =>
+      params.isClassSupported(platform: platform);
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.isMethodSupported}
+  ///Check if the given [method] is supported by the [defaultTargetPlatform] or a specific [platform].
+  ///{@endtemplate}
+  bool isMethodSupported(
+    PlatformContainerControllerMethod method, {
+    TargetPlatform? platform,
+  }) => _PlatformContainerControllerMethodSupported.isMethodSupported(
+    method,
+    platform: platform,
+  );
+}
