@@ -9,9 +9,12 @@ import android.webkit.ValueCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.webkit.CookieManagerCompat;
+import androidx.webkit.Profile;
+import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
 import com.pichillilorenzo.flutter_inappwebview_android.types.ChannelDelegateImpl;
+import com.pichillilorenzo.flutter_inappwebview_android.webview.in_app_webview.InAppWebView;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -78,7 +81,9 @@ public class MyCookieManager extends ChannelDelegateImpl {
         }
         break;
       case "getCookies":
-        result.success(getCookies((String) call.argument("url")));
+        result.success(getCookies(
+            (String) call.argument("url"),
+            call.argument("webViewId")));
         break;
       case "deleteCookie":
         {
@@ -86,7 +91,8 @@ public class MyCookieManager extends ChannelDelegateImpl {
           String name = (String) call.argument("name");
           String domain = (String) call.argument("domain");
           String path = (String) call.argument("path");
-          deleteCookie(url, name, domain, path, result);
+          Object webViewId = call.argument("webViewId");
+          deleteCookie(url, name, domain, path, webViewId, result);
         }
         break;
       case "deleteCookies":
@@ -143,6 +149,39 @@ public class MyCookieManager extends ChannelDelegateImpl {
     }
 
     return cookieManager;
+  }
+
+  // Resolve the CookieManager for the androidx.webkit.Profile that the
+  // WebView identified by [webViewId] is bound to. The store is keyed by
+  // *profile*, not by WebView — two WebViews sharing a containerId share
+  // their cookies, and this lookup returns the same manager for both.
+  // The webViewId is only the lookup vehicle to find which profile is
+  // bound. Falls back to the global CookieManager when:
+  //   - webViewId is null (caller didn't scope the op)
+  //   - MULTI_PROFILE feature is unsupported (System WebView <110)
+  //   - no live InAppWebView with that id is registered
+  //   - the bound profile is the default
+  // Behavior is byte-identical to the stock global path when the fallback
+  // triggers, so unscoped callers (cookie inspector during legacy flows,
+  // settings-import paths) keep working unchanged.
+  static private @Nullable CookieManager cookieManagerForContainerOf(@Nullable Object webViewId) {
+    if (webViewId == null
+        || !WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+      return getCookieManager();
+    }
+    InAppWebView webView = InAppWebView.findById(webViewId);
+    if (webView == null) return getCookieManager();
+    Profile profile;
+    try {
+      profile = WebViewCompat.getProfile(webView);
+    } catch (Throwable t) {
+      return getCookieManager();
+    }
+    if (profile == null
+        || Profile.DEFAULT_PROFILE_NAME.equals(profile.getName())) {
+      return getCookieManager();
+    }
+    return profile.getCookieManager();
   }
 
   public void setCookie(String url,
@@ -207,10 +246,17 @@ public class MyCookieManager extends ChannelDelegateImpl {
   }
 
   public List<Map<String, Object>> getCookies(final String url) {
+    return getCookies(url, null);
+  }
+
+  // webViewId-scoped overload: routes through the bound profile's
+  // CookieManager when webViewId resolves to a profile-bound WebView;
+  // identical to the stock global-jar path when it doesn't.
+  public List<Map<String, Object>> getCookies(final String url, @Nullable Object webViewId) {
 
     final List<Map<String, Object>> cookieListMap = new ArrayList<>();
 
-    cookieManager = getCookieManager();
+    cookieManager = cookieManagerForContainerOf(webViewId);
     if (cookieManager == null) return cookieListMap;
 
     List<String> cookies = new ArrayList<>();
@@ -289,7 +335,15 @@ public class MyCookieManager extends ChannelDelegateImpl {
   }
 
   public void deleteCookie(String url, String name, String domain, String path, final MethodChannel.Result result) {
-    cookieManager = getCookieManager();
+    deleteCookie(url, name, domain, path, null, result);
+  }
+
+  // webViewId-scoped overload: routes through the bound profile's
+  // CookieManager when webViewId resolves to a profile-bound WebView;
+  // identical to the stock global-jar path when it doesn't.
+  public void deleteCookie(String url, String name, String domain, String path,
+                           @Nullable Object webViewId, final MethodChannel.Result result) {
+    cookieManager = cookieManagerForContainerOf(webViewId);
     if (cookieManager == null) {
       result.success(false);
       return;
