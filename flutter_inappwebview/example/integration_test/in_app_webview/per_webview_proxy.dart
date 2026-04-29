@@ -1,12 +1,16 @@
 part of 'main.dart';
 
 void perWebViewProxy() {
-  // `proxySettings` is honored on iOS 17+ / macOS 14+ only, where
-  // WKWebsiteDataStore.proxyConfigurations can scope a proxy to a single
-  // WebView. Everywhere else the setting is serialized and ignored.
-  final shouldSkip = !InAppWebViewSettings.isPropertySupported(
-    InAppWebViewSettingsProperty.proxySettings,
-  );
+  // `proxySettings` scopes a proxy to a single WebView on iOS 17+ / macOS 14+,
+  // where WKWebsiteDataStore.proxyConfigurations belongs to the WebView's data
+  // store. Linux scopes it to a container's network session instead, so a
+  // WebView without a containerId, like this one, ignores it there; the
+  // container test below covers Linux.
+  final shouldSkip =
+      !InAppWebViewSettings.isPropertySupported(
+        InAppWebViewSettingsProperty.proxySettings,
+      ) ||
+      defaultTargetPlatform == TargetPlatform.linux;
 
   // The test server's proxy (port 8083) answers *any* request with its own
   // "Proxy Works" page instead of forwarding, so the page that comes back is
