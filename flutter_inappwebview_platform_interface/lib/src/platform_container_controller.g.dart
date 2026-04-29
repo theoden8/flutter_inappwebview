@@ -14,6 +14,7 @@ extension _PlatformContainerControllerCreationParamsClassSupported
   ///- Android WebView
   ///- iOS WKWebView 17.0+
   ///- macOS WKWebView 14.0+
+  ///- Linux WPE WebKit
   ///
   ///Use the [PlatformContainerControllerCreationParams.isClassSupported] method to check if this class is supported at runtime.
   ///{@endtemplate}
@@ -23,6 +24,7 @@ extension _PlatformContainerControllerCreationParamsClassSupported
           TargetPlatform.android,
           TargetPlatform.iOS,
           TargetPlatform.macOS,
+          TargetPlatform.linux,
         ].contains(platform ?? defaultTargetPlatform);
   }
 }
@@ -56,9 +58,11 @@ enum PlatformContainerControllerMethod {
   ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.deleteContainer.supported_platforms}
   ///
   ///**Officially Supported Platforms/Implementations**:
-  ///- Android WebView ([Official API - ProfileStore.deleteProfile](https://developer.android.com/reference/androidx/webkit/ProfileStore#deleteContainer(java.lang.String)))
+  ///- Android WebView ([Official API - ProfileStore.deleteProfile](https://developer.android.com/reference/androidx/webkit/ProfileStore#deleteProfile(java.lang.String)))
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.remove(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.remove(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove))
+  ///- Linux WPE WebKit:
+  ///    - Recursively removes both `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/`. The container's data is gone after the next process restart; if any WebView is still attached to its `WebKitNetworkSession` the in-memory state of that session is unaffected — dispose those WebViews first.
   ///
   ///**Parameters - Officially Supported Platforms/Implementations**:
   ///- [containerId]: all platforms
@@ -72,9 +76,11 @@ enum PlatformContainerControllerMethod {
   ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.getAllContainerNames.supported_platforms}
   ///
   ///**Officially Supported Platforms/Implementations**:
-  ///- Android WebView ([Official API - ProfileStore.getAllContainerNames](https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllContainerNames()))
+  ///- Android WebView ([Official API - ProfileStore.getAllProfileNames](https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllProfileNames()))
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
+  ///- Linux WPE WebKit:
+  ///    - Returns the names of subdirectories under `<XDG_DATA_HOME>/flutter_inappwebview/containers/`. Empty when the directory does not exist.
   ///
   ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
   ///{@endtemplate}
@@ -85,9 +91,11 @@ enum PlatformContainerControllerMethod {
   ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.hasContainer.supported_platforms}
   ///
   ///**Officially Supported Platforms/Implementations**:
-  ///- Android WebView ([Official API - ProfileStore.getAllContainerNames](https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllContainerNames()))
+  ///- Android WebView ([Official API - ProfileStore.getAllProfileNames](https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllProfileNames()))
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
+  ///- Linux WPE WebKit:
+  ///    - Checks for `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/`.
   ///
   ///**Parameters - Officially Supported Platforms/Implementations**:
   ///- [containerId]: all platforms
@@ -110,6 +118,7 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case PlatformContainerControllerMethod.getAllContainerNames:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
@@ -117,6 +126,7 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case PlatformContainerControllerMethod.hasContainer:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
@@ -124,6 +134,7 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
     }
   }

@@ -19,6 +19,7 @@ part 'platform_container_controller.g.dart';
     AndroidPlatform(),
     IOSPlatform(available: '17.0'),
     MacOSPlatform(available: '14.0'),
+    LinuxPlatform(),
   ],
 )
 @immutable
@@ -147,9 +148,9 @@ abstract class PlatformContainerController extends PlatformInterface {
   @SupportedPlatforms(
     platforms: [
       AndroidPlatform(
-        apiName: 'ProfileStore.getAllContainerNames',
+        apiName: 'ProfileStore.getAllProfileNames',
         apiUrl:
-            'https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllContainerNames()',
+            'https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllProfileNames()',
       ),
       IOSPlatform(
         apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
@@ -162,6 +163,10 @@ abstract class PlatformContainerController extends PlatformInterface {
         apiUrl:
             'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
         available: '14.0',
+      ),
+      LinuxPlatform(
+        note:
+            "Returns the names of subdirectories under `<XDG_DATA_HOME>/flutter_inappwebview/containers/`. Empty when the directory does not exist.",
       ),
     ],
   )
@@ -180,9 +185,9 @@ abstract class PlatformContainerController extends PlatformInterface {
   @SupportedPlatforms(
     platforms: [
       AndroidPlatform(
-        apiName: 'ProfileStore.getAllContainerNames',
+        apiName: 'ProfileStore.getAllProfileNames',
         apiUrl:
-            'https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllContainerNames()',
+            'https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllProfileNames()',
       ),
       IOSPlatform(
         apiName: 'WKWebsiteDataStore.allDataStoreIdentifiers',
@@ -195,6 +200,10 @@ abstract class PlatformContainerController extends PlatformInterface {
         apiUrl:
             'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
         available: '14.0',
+      ),
+      LinuxPlatform(
+        note:
+            "Checks for `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/`.",
       ),
     ],
   )
@@ -221,7 +230,7 @@ abstract class PlatformContainerController extends PlatformInterface {
       AndroidPlatform(
         apiName: 'ProfileStore.deleteProfile',
         apiUrl:
-            'https://developer.android.com/reference/androidx/webkit/ProfileStore#deleteContainer(java.lang.String)',
+            'https://developer.android.com/reference/androidx/webkit/ProfileStore#deleteProfile(java.lang.String)',
       ),
       IOSPlatform(
         apiName: 'WKWebsiteDataStore.remove(forIdentifier:)',
@@ -234,6 +243,10 @@ abstract class PlatformContainerController extends PlatformInterface {
         apiUrl:
             'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove',
         available: '14.0',
+      ),
+      LinuxPlatform(
+        note:
+            "Recursively removes both `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/`. The container's data is gone after the next process restart; if any WebView is still attached to its `WebKitNetworkSession` the in-memory state of that session is unaffected — dispose those WebViews first.",
       ),
     ],
   )

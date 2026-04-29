@@ -381,6 +381,8 @@ class InAppWebViewSettings {
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on iOS <17.
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on macOS <14.
+  ///- Linux WPE WebKit ([Official API - WebKitNetworkSession](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)):
+  ///    - Requires WPE WebKit 2.40+. The session's data and cache directories are derived from XDG_DATA_HOME and XDG_CACHE_HOME (`<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/data` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/cache`). Sessions are cached process-wide by id so multiple WebViews joining the same container share state. Ignored on WPE WebKit <2.40.
   String? containerId;
 
   ///List of [ContentBlocker] that are a set of rules used to block content in the browser window.
@@ -3445,6 +3447,8 @@ enum InAppWebViewSettingsProperty {
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on iOS <17.
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on macOS <14.
+  ///- Linux WPE WebKit ([Official API - WebKitNetworkSession](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)):
+  ///    - Requires WPE WebKit 2.40+. The session's data and cache directories are derived from XDG_DATA_HOME and XDG_CACHE_HOME (`<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/data` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/cache`). Sessions are cached process-wide by id so multiple WebViews joining the same container share state. Ignored on WPE WebKit <2.40.
   ///
   ///Use the [InAppWebViewSettings.isPropertySupported] method to check if this property is supported at runtime.
   ///{@endtemplate}
@@ -5628,6 +5632,7 @@ extension _InAppWebViewSettingsPropertySupported on InAppWebViewSettings {
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case InAppWebViewSettingsProperty.contentBlockers:
         return ((kIsWeb && platform != null) || !kIsWeb) &&

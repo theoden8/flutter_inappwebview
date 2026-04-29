@@ -1,7 +1,8 @@
 ## 1.4.0-beta.3
 
-- Added `PlatformContainerController` class with `getAllContainerNames`, `hasProfile`, `deleteProfile` methods for enumerating and deleting persistent per-WebView profiles
-- Added `containerId` and `proxySettings` properties to `InAppWebViewSettings` for per-WebView persistent data-store partitioning (Android `androidx.webkit.Profile`, iOS 17+ / macOS 14+ `WKWebsiteDataStore(forIdentifier:)`) and per-WebView proxy (iOS 17+ / macOS 14+ `WKWebsiteDataStore.proxyConfigurations`)
+- Added `PlatformContainerController` class with `getAllContainerNames`, `hasContainer`, `deleteContainer` methods for enumerating and deleting persistent named storage containers (supported on Android, iOS 17+, macOS 14+, Linux WPE WebKit 2.40+)
+- Added `containerId` property to `InAppWebViewSettings` for joining a named storage container at WebView construction (Android `androidx.webkit.Profile`, iOS 17+ / macOS 14+ `WKWebsiteDataStore(forIdentifier:)`, Linux `WebKitNetworkSession`)
+- Added `proxySettings` property to `InAppWebViewSettings` for per-WebView proxy (iOS 17+ / macOS 14+ `WKWebsiteDataStore.proxyConfigurations`)
 - Updated `flutter_inappwebview_internal_annotations` dependency from `^1.2.0` to `^1.3.0`
 - Added `isClassSupported`, `isPropertySupported`, `isMethodSupported` static methods for all main classes, such as `PlatformInAppWebViewController`, `InAppWebViewSettings`, `PlatformInAppBrowser`, etc., in order to check if a class, property, or method is supported by the platform at runtime
 - Added `InAppWebViewSettings.attributionRegistrationBehavior` Android-specific property, the `AttributionBehavior` type and the `WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR` feature
