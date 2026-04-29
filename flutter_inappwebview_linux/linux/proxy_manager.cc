@@ -2,7 +2,9 @@
 
 #include <cctype>
 #include <cstring>
+#include <vector>
 
+#include "container_session_cache.h"
 #include "plugin_instance.h"
 #include "utils/flutter.h"
 #include "utils/log.h"
@@ -13,6 +15,25 @@ namespace {
 // Helper to compare method names
 bool string_equals(const gchar* a, const char* b) {
   return strcmp(a, b) == 0;
+}
+
+// Sessions that setProxyOverride / clearProxyOverride should touch:
+// the default session plus every cached container session. Without
+// the fan-out, contained WebViews use a per-container session that
+// never sees the override, so they'd silently bypass the proxy the
+// caller asked the platform to apply process-wide.
+std::vector<WebKitNetworkSession*> sessions_to_apply_proxy_to() {
+  std::vector<WebKitNetworkSession*> sessions;
+  WebKitNetworkSession* defaultSession = webkit_network_session_get_default();
+  if (defaultSession != nullptr) {
+    sessions.push_back(defaultSession);
+  }
+  for (const auto& entry : container_session_cache()) {
+    if (entry.second != nullptr && entry.second != defaultSession) {
+      sessions.push_back(entry.second);
+    }
+  }
+  return sessions;
 }
 }  // namespace
 
@@ -96,9 +117,9 @@ void ProxyManager::HandleMethodCall(FlMethodCall* method_call) {
 }
 
 void ProxyManager::setProxyOverride(const ProxySettings& settings) {
-  WebKitNetworkSession* session = webkit_network_session_get_default();
-  if (session == nullptr) {
-    errorLog("ProxyManager: Failed to get default network session");
+  std::vector<WebKitNetworkSession*> sessions = sessions_to_apply_proxy_to();
+  if (sessions.empty()) {
+    errorLog("ProxyManager: No network sessions available");
     return;
   }
 
@@ -177,24 +198,29 @@ void ProxyManager::setProxyOverride(const ProxySettings& settings) {
         proxySettings, entry.first.c_str(), entry.second.c_str());
   }
 
-  // Apply the proxy settings to the session
-  webkit_network_session_set_proxy_settings(
-      session, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxySettings);
+  // Apply the proxy settings to every session (default + each cached
+  // container) so a process-wide override actually applies process-wide.
+  for (WebKitNetworkSession* s : sessions) {
+    webkit_network_session_set_proxy_settings(
+        s, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxySettings);
+  }
 
   // Free the proxy settings
   webkit_network_proxy_settings_free(proxySettings);
 }
 
 void ProxyManager::clearProxyOverride() {
-  WebKitNetworkSession* session = webkit_network_session_get_default();
-  if (session == nullptr) {
-    errorLog("ProxyManager: Failed to get default network session");
+  std::vector<WebKitNetworkSession*> sessions = sessions_to_apply_proxy_to();
+  if (sessions.empty()) {
+    errorLog("ProxyManager: No network sessions available");
     return;
   }
 
-  // Revert to system default proxy settings
-  webkit_network_session_set_proxy_settings(
-      session, WEBKIT_NETWORK_PROXY_MODE_DEFAULT, nullptr);
+  // Revert to system default proxy settings on every session.
+  for (WebKitNetworkSession* s : sessions) {
+    webkit_network_session_set_proxy_settings(
+        s, WEBKIT_NETWORK_PROXY_MODE_DEFAULT, nullptr);
+  }
 }
 
 }  // namespace flutter_inappwebview_plugin

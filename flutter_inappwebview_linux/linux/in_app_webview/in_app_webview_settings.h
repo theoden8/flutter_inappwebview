@@ -141,6 +141,17 @@ class InAppWebViewSettings {
   // When true, creates an ephemeral network session (no persistent storage)
   bool incognito = false;
 
+  // === Container join ===
+  // When non-empty (and incognito is false), the WebView joins a named,
+  // persistent storage container at construction. Cookies, localStorage,
+  // IndexedDB, ServiceWorkers and the HTTP cache live in
+  //   <XDG_DATA_HOME>/flutter_inappwebview/containers/<containerId>/data
+  //   <XDG_CACHE_HOME>/flutter_inappwebview/containers/<containerId>/cache
+  // Multiple WebViews joining the same container share storage.
+  // Honored on WPE WebKit 2.40+. Ignored on older runtimes (the
+  // network-session API isn't there).
+  std::string containerId;
+
   // === CORS allowlist ===
   // List of URI patterns for which CORS checks are disabled
   // Pattern format: [protocol]://[host]:[port]
