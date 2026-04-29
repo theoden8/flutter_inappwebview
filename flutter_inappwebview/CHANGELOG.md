@@ -1,7 +1,8 @@
 ## 6.2.0-beta.3
 
-- Added `ProfileController` (`getAllContainerNames`, `hasProfile`, `deleteProfile`) for enumerating and deleting persistent per-WebView profiles
-- Added `containerId` and `proxySettings` properties to `InAppWebViewSettings` for per-WebView persistent data-store partitioning (Android `androidx.webkit.Profile`, iOS 17+ / macOS 14+ `WKWebsiteDataStore(forIdentifier:)`) and per-WebView proxy (iOS 17+ / macOS 14+ `WKWebsiteDataStore.proxyConfigurations`)
+- Added `ContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) for enumerating and deleting named persistent storage containers
+- Added `containerId` property to `InAppWebViewSettings` for joining a named storage container at WebView construction (Android `androidx.webkit.Profile`, iOS 17+ / macOS 14+ `WKWebsiteDataStore(forIdentifier:)`, Linux `WebKitNetworkSession`)
+- Added `proxySettings` property to `InAppWebViewSettings` for per-WebView proxy (iOS 17+ / macOS 14+ `WKWebsiteDataStore.proxyConfigurations`)
 - Added Linux support
 - Updated dependencies to the latest versions for all platform implementations:
   - `flutter_inappwebview_platform_interface`: `^1.4.0-beta.2` -> `^1.4.0-beta.3`
@@ -10,7 +11,7 @@
   - `flutter_inappwebview_macos`: `^1.2.0-beta.2` -> `^1.2.0-beta.3`
   - `flutter_inappwebview_web`: `^1.2.0-beta.2` -> `^1.2.0-beta.3`
   - `flutter_inappwebview_windows`: `^0.7.0-beta.2` -> `^0.7.0-beta.3`
-  - `flutter_inappwebview_linux`: `^0.1.0-beta.1`
+  - `flutter_inappwebview_linux`: `^0.1.0-beta.2`
 - Added `InAppWebViewController.getFavicon` wrapper with `faviconImageFormat` support.
 - Fixed "When useShouldInterceptAjaxRequest is true, some ajax requests doesn't work" [#2197](https://github.com/pichillilorenzo/flutter_inappwebview/issues/2197)
 - Mapped `isClassSupported`, `isPropertySupported`, `isMethodSupported` platform interface static methods to the corresponding plugin classes such as `InAppWebViewController`, `InAppWebView`, `InAppBrowser`, etc., in order to check if a class, property, or method is supported by the platform at runtime
@@ -19,8 +20,9 @@
 - Minimum Flutter SDK `>=3.32.0`
 
 #### Platform Interface
-- Added `PlatformContainerController` class with `getAllContainerNames`, `hasProfile`, `deleteProfile` methods
-- Added `containerId` and `proxySettings` properties to `InAppWebViewSettings` for per-WebView persistent data-store partitioning and per-WebView proxy
+- Added `PlatformContainerController` class with `getAllContainerNames`, `hasContainer`, `deleteContainer` methods
+- Added `containerId` property to `InAppWebViewSettings` for joining a named storage container
+- Added `proxySettings` property to `InAppWebViewSettings` for per-WebView proxy
 - Updated `flutter_inappwebview_internal_annotations` dependency from `^1.2.0` to `^1.3.0`
 - Added `isClassSupported`, `isPropertySupported`, `isMethodSupported` static methods for all main classes, such as `PlatformInAppWebViewController`, `InAppWebViewSettings`, `PlatformInAppBrowser`, etc., in order to check if a class, property, or method is supported by the platform at runtime
 - Added `isSupported` method to all custom enum classes
@@ -32,9 +34,9 @@
 - Deprecated `onReceivedIcon` in favor of `onFaviconChanged`
 
 #### Android Platform
-- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasProfile`, `deleteProfile`) wrapping `androidx.webkit.ProfileStore`
-- Implemented per-WebView persistent profile partitioning via `InAppWebViewSettings.containerId`, bound through `WebViewCompat.setProfile` / `ProfileStore.getOrCreateProfile` before any session-bound op runs in `InAppWebView.prepare()` (requires `WebViewFeature.MULTI_PROFILE`, System WebView 110+)
-- `MyCookieManager` now resolves the per-profile `CookieManager` via the new `webViewId` argument so cookie ops on a profile-bound WebView land in the profile's jar
+- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) wrapping `androidx.webkit.ProfileStore`
+- Implemented WebView container join via `InAppWebViewSettings.containerId`, bound through `WebViewCompat.setProfile` / `ProfileStore.getOrCreateProfile` before any session-bound op runs in `InAppWebView.prepare()` (requires `WebViewFeature.MULTI_PROFILE`, System WebView 110+)
+- `MyCookieManager` now resolves the container's `CookieManager` via the new `webViewId` argument so cookie ops on a WebView in a container land in that container's jar
 - Updated native dependencies:
   - implementation from `'androidx.webkit:webkit:1.12.0'` to `'androidx.webkit:webkit:1.14.0'`
   - implementation from `'androidx.browser:browser:1.8.0'` to `'androidx.browser:browser:1.9.0'`
@@ -55,10 +57,14 @@
 - Merged "fix #2484, Remove not-empty assert for Cookie.value" [#2486](https://github.com/pichillilorenzo/flutter_inappwebview/pull/2486) (thanks to [laishere](https://github.com/laishere))
 
 #### macOS and iOS Platforms
-- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasProfile`, `deleteProfile`) on iOS 17+ / macOS 14+ via `WKWebsiteDataStore.fetchAllDataStoreIdentifiers` / `WKWebsiteDataStore.remove(forIdentifier:)`, with a `UserDefaults`-backed `containerId ↔ UUID` registry so listing returns original strings
-- Implemented per-WebView persistent profile partitioning via `InAppWebViewSettings.containerId` (iOS 17+ / macOS 14+), wiring `WKWebsiteDataStore(forIdentifier:)` in `preWKWebViewConfiguration(settings:)` with a SHA-256-derived stable UUID
+- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) on iOS 17+ / macOS 14+ via `WKWebsiteDataStore.fetchAllDataStoreIdentifiers` / `WKWebsiteDataStore.remove(forIdentifier:)`, with a `UserDefaults`-backed `containerId ↔ UUID` registry so listing returns original strings
+- Implemented WebView container join via `InAppWebViewSettings.containerId` (iOS 17+ / macOS 14+), wiring `WKWebsiteDataStore(forIdentifier:)` in `preWKWebViewConfiguration(settings:)` with a SHA-256-derived stable UUID
 - Implemented per-WebView proxy via `InAppWebViewSettings.proxySettings` (iOS 17+ / macOS 14+) attached to the WebView's data store
-- `MyCookieManager` now resolves the per-profile `WKHTTPCookieStore` via the new `webViewId` argument so cookie ops on a profile-bound WebView land in the profile's jar
+- `MyCookieManager` now resolves the container's `WKHTTPCookieStore` via the new `webViewId` argument so cookie ops on a WebView in a container land in that container's jar
+
+#### Linux Platform
+- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) backed by `<XDG_DATA_HOME>/flutter_inappwebview/containers/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/`
+- Implemented WebView container join via `InAppWebViewSettings.containerId` using a process-wide cached `WebKitNetworkSession` with the container's data and cache directories, wired at `webkit_web_view_new` time. Multiple WebViews joining the same container share storage. Honored on WPE WebKit 2.40+
 - Implemented `saveState`, `restoreState` InAppWebViewController methods
 - Implemented `PlatformProxyController` class
 - Add Swift Package Manager support [#2409](https://github.com/pichillilorenzo/flutter_inappwebview/issues/2409)

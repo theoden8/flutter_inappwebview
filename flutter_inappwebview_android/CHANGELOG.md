@@ -1,6 +1,6 @@
 ## 1.2.0-beta.3
 
-- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasProfile`, `deleteProfile`) wrapping `androidx.webkit.ProfileStore`; methods return empty/false when `WebViewFeature.MULTI_PROFILE` is unsupported
+- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) wrapping `androidx.webkit.ProfileStore`; methods return empty/false when `WebViewFeature.MULTI_PROFILE` is unsupported
 - Implemented per-WebView persistent profile partitioning via `InAppWebViewSettings.containerId`, bound through `WebViewCompat.setProfile` / `ProfileStore.getOrCreateProfile` before any session-bound op runs in `InAppWebView.prepare()` (requires `WebViewFeature.MULTI_PROFILE`, System WebView 110+; ignored otherwise)
 - `MyCookieManager` now resolves the per-profile `CookieManager` via the new `webViewId` argument so cookie ops on a profile-bound WebView land in the profile's jar
 - Updated flutter_inappwebview_platform_interface version to ^1.4.0-beta.3
