@@ -381,6 +381,8 @@ class InAppWebViewSettings {
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on iOS <17.
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on macOS <14.
+  ///- Linux WPE WebKit ([Official API - WebKitNetworkSession](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)):
+  ///    - Requires WPE WebKit 2.40+. The session's data and cache directories are derived from XDG_DATA_HOME and XDG_CACHE_HOME (`<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/data` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/cache`). Sessions are cached process-wide by id so multiple WebViews joining the same container share state. Ignored on WPE WebKit <2.40.
   String? containerId;
 
   ///List of [ContentBlocker] that are a set of rules used to block content in the browser window.
@@ -1565,17 +1567,31 @@ class InAppWebViewSettings {
   ///set, the proxy is attached to that profile's data store, so each
   ///profile can have its own proxy without affecting other WebViews.
   ///
-  ///This is honored only on iOS 17+ / macOS 14+ where Apple exposes
+  ///On iOS 17+ / macOS 14+ this is attached to the WebView's data store via
   ///[`WKWebsiteDataStore.proxyConfigurations`](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations).
-  ///On older OS versions, and on Android / Linux / Windows / Web, the
-  ///field is ignored — there is no native API on those platforms to
-  ///scope a proxy to a single data store. Use
-  ///[PlatformProxyController.setProxyOverride] for a process-wide
-  ///proxy on those platforms.
+  ///On Linux it is attached to the container's
+  ///[`WebKitNetworkSession`](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)
+  ///before that session is created, so the proxy is in place before the
+  ///container's first request, and a container carrying its own proxy is
+  ///left alone by [PlatformProxyController.setProxyOverride].
+  ///
+  ///Every platform that honors this scopes the proxy to a storage session
+  ///rather than to a WebView, so a proxy is only really per-WebView when
+  ///[containerId] gives that WebView a session of its own. Without a
+  ///[containerId] the WebView shares the default session with every other
+  ///one, and on Linux such a value is ignored rather than applied to that
+  ///shared session.
+  ///
+  ///On older OS versions, and on Android / Windows / Web, the field is
+  ///ignored — there is no native API there to scope a proxy to a single
+  ///storage session. Use [PlatformProxyController.setProxyOverride] for a
+  ///process-wide proxy on those platforms.
   ///
   ///**Officially Supported Platforms/Implementations**:
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
+  ///- Linux WPE WebKit ([Official API - webkit_network_session_set_proxy_settings](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.NetworkSession.set_proxy_settings.html)):
+  ///    - Requires WPE WebKit 2.40+ and a containerId: WPE scopes a proxy to a WebKitNetworkSession and only a container owns one, so a WebView without a containerId shares the default session and its value is ignored rather than applied there. A container with its own proxy is excluded from PlatformProxyController.setProxyOverride's fan-out.
   ProxySettings? proxySettings;
 
   ///Regular expression used on native side by the [PlatformWebViewCreationParams.shouldOverrideUrlLoading]
@@ -3445,6 +3461,8 @@ enum InAppWebViewSettingsProperty {
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on iOS <17.
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188694-init)):
   ///    - Apple's API requires a UUID; the supplied identifier is hashed (SHA-256, first 16 bytes) to derive a stable UUID. Ignored on macOS <14.
+  ///- Linux WPE WebKit ([Official API - WebKitNetworkSession](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)):
+  ///    - Requires WPE WebKit 2.40+. The session's data and cache directories are derived from XDG_DATA_HOME and XDG_CACHE_HOME (`<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/data` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/cache`). Sessions are cached process-wide by id so multiple WebViews joining the same container share state. Ignored on WPE WebKit <2.40.
   ///
   ///Use the [InAppWebViewSettings.isPropertySupported] method to check if this property is supported at runtime.
   ///{@endtemplate}
@@ -4873,6 +4891,8 @@ enum InAppWebViewSettingsProperty {
   ///**Officially Supported Platforms/Implementations**:
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.proxyConfigurations](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations))
+  ///- Linux WPE WebKit ([Official API - webkit_network_session_set_proxy_settings](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.NetworkSession.set_proxy_settings.html)):
+  ///    - Requires WPE WebKit 2.40+ and a containerId: WPE scopes a proxy to a WebKitNetworkSession and only a container owns one, so a WebView without a containerId shares the default session and its value is ignored rather than applied there. A container with its own proxy is excluded from PlatformProxyController.setProxyOverride's fan-out.
   ///
   ///Use the [InAppWebViewSettings.isPropertySupported] method to check if this property is supported at runtime.
   ///{@endtemplate}
@@ -5628,6 +5648,7 @@ extension _InAppWebViewSettingsPropertySupported on InAppWebViewSettings {
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case InAppWebViewSettingsProperty.contentBlockers:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
@@ -6223,6 +6244,7 @@ extension _InAppWebViewSettingsPropertySupported on InAppWebViewSettings {
             [
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case InAppWebViewSettingsProperty.regexToAllowSyncUrlLoading:
         return ((kIsWeb && platform != null) || !kIsWeb) &&

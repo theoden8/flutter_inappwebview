@@ -14,6 +14,7 @@ extension _PlatformContainerControllerCreationParamsClassSupported
   ///- Android WebView
   ///- iOS WKWebView 17.0+
   ///- macOS WKWebView 14.0+
+  ///- Linux WPE WebKit
   ///
   ///Use the [PlatformContainerControllerCreationParams.isClassSupported] method to check if this class is supported at runtime.
   ///{@endtemplate}
@@ -23,6 +24,7 @@ extension _PlatformContainerControllerCreationParamsClassSupported
           TargetPlatform.android,
           TargetPlatform.iOS,
           TargetPlatform.macOS,
+          TargetPlatform.linux,
         ].contains(platform ?? defaultTargetPlatform);
   }
 }
@@ -62,6 +64,8 @@ enum PlatformContainerControllerMethod {
   ///    - Scoped to `WKWebsiteDataStore.allWebsiteDataTypes()` since the distant past — cookies, DOM storage, IndexedDB, ServiceWorkers, HTTP cache, fetch cache and more. Works while a WKWebView is still bound to the data store, which is the use-case `deleteContainer` cannot serve.
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.removeData(ofTypes:modifiedSince:completionHandler:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/1532938-removedata)):
   ///    - Scoped to `WKWebsiteDataStore.allWebsiteDataTypes()` since the distant past. Works while a WKWebView is still bound.
+  ///- Linux WPE WebKit ([Official API - webkit_website_data_manager_clear](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.WebsiteDataManager.clear.html)):
+  ///    - Scoped to `WEBKIT_WEBSITE_DATA_ALL` with timespan 0 (since epoch). Works while a WebView is still bound to the container's `WebKitNetworkSession`. Returns false if the container's session has not been materialized yet (no WebView has joined it this process).
   ///
   ///**Parameters - Officially Supported Platforms/Implementations**:
   ///- [containerId]: all platforms
@@ -79,6 +83,8 @@ enum PlatformContainerControllerMethod {
   ///    - Returns false for a container used since the app started: WebView keeps a profile loaded for the rest of the process once it has been used, and ProfileStore.deleteProfile refuses a loaded profile. Delete it on a later launch, before any WebView joins it.
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.remove(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.remove(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove))
+  ///- Linux WPE WebKit:
+  ///    - Recursively removes both `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/`. The container's data is gone after the next process restart; if any WebView is still attached to its `WebKitNetworkSession` the in-memory state of that session is unaffected — dispose those WebViews first.
   ///
   ///**Parameters - Officially Supported Platforms/Implementations**:
   ///- [containerId]: all platforms
@@ -95,6 +101,8 @@ enum PlatformContainerControllerMethod {
   ///- Android WebView ([Official API - ProfileStore.getAllProfileNames](https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllProfileNames()))
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
+  ///- Linux WPE WebKit:
+  ///    - Returns the names of subdirectories under `<XDG_DATA_HOME>/flutter_inappwebview/containers/`. Empty when the directory does not exist.
   ///
   ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
   ///{@endtemplate}
@@ -108,6 +116,8 @@ enum PlatformContainerControllerMethod {
   ///- Android WebView ([Official API - ProfileStore.getAllProfileNames](https://developer.android.com/reference/androidx/webkit/ProfileStore#getAllProfileNames()))
   ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
   ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore.allDataStoreIdentifiers](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers))
+  ///- Linux WPE WebKit:
+  ///    - Checks for `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/`.
   ///
   ///**Parameters - Officially Supported Platforms/Implementations**:
   ///- [containerId]: all platforms
@@ -130,6 +140,7 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case PlatformContainerControllerMethod.deleteContainer:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
@@ -137,6 +148,7 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case PlatformContainerControllerMethod.getAllContainerNames:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
@@ -144,6 +156,7 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case PlatformContainerControllerMethod.hasContainer:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
@@ -151,6 +164,7 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.android,
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
     }
   }
