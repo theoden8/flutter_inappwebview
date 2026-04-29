@@ -19,6 +19,7 @@ part 'platform_container_controller.g.dart';
     AndroidPlatform(),
     IOSPlatform(available: '17.0'),
     MacOSPlatform(available: '14.0'),
+    LinuxPlatform(),
   ],
 )
 @immutable
@@ -163,6 +164,10 @@ abstract class PlatformContainerController extends PlatformInterface {
             'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
         available: '14.0',
       ),
+      LinuxPlatform(
+        note:
+            "Returns the names of subdirectories under `<XDG_DATA_HOME>/flutter_inappwebview/containers/`. Empty when the directory does not exist.",
+      ),
     ],
   )
   Future<List<String>> getAllContainerNames() {
@@ -195,6 +200,10 @@ abstract class PlatformContainerController extends PlatformInterface {
         apiUrl:
             'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188695-alldatastoreidentifiers',
         available: '14.0',
+      ),
+      LinuxPlatform(
+        note:
+            "Checks for `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/`.",
       ),
     ],
   )
@@ -238,6 +247,10 @@ abstract class PlatformContainerController extends PlatformInterface {
             'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4188696-remove',
         available: '14.0',
       ),
+      LinuxPlatform(
+        note:
+            "Recursively removes both `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/`. The container's data is gone after the next process restart; if any WebView is still attached to its `WebKitNetworkSession` the in-memory state of that session is unaffected — dispose those WebViews first.",
+      ),
     ],
   )
   Future<bool> deleteContainer(String containerId) {
@@ -258,7 +271,9 @@ abstract class PlatformContainerController extends PlatformInterface {
   ///set of subsystems isn't uniform — Apple's
   ///[`removeData(ofTypes:modifiedSince:completionHandler:)`](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/1532938-removedata)
   ///is a single primitive that scopes cookies, DOM storage,
-  ///IndexedDB, ServiceWorkers and the HTTP cache. Android's `androidx.webkit.Profile`
+  ///IndexedDB, ServiceWorkers and the HTTP cache; Linux's
+  ///[`webkit_website_data_manager_clear`](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.WebsiteDataManager.clear.html)
+  ///is similarly comprehensive. Android's `androidx.webkit.Profile`
   ///doesn't expose a single clear-all; the implementation composes
   ///per-subsystem clears via `Profile.getCookieManager`,
   ///`Profile.getWebStorage` and `Profile.getGeolocationPermissions`,
@@ -298,6 +313,13 @@ abstract class PlatformContainerController extends PlatformInterface {
         available: '14.0',
         note:
             "Scoped to `WKWebsiteDataStore.allWebsiteDataTypes()` since the distant past. Works while a WKWebView is still bound.",
+      ),
+      LinuxPlatform(
+        apiName: 'webkit_website_data_manager_clear',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.WebsiteDataManager.clear.html',
+        note:
+            "Scoped to `WEBKIT_WEBSITE_DATA_ALL` with timespan 0 (since epoch). Works while a WebView is still bound to the container's `WebKitNetworkSession`. Returns false if the container's session has not been materialized yet (no WebView has joined it this process).",
       ),
     ],
   )
