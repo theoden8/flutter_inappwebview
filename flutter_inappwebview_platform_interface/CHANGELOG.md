@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] Added `UserAgentMetadata` and `BrandVersion` types and the `InAppWebViewSettings.userAgentMetadata` setting. Maps to `androidx.webkit.WebSettingsCompat.setUserAgentMetadata` on Android. Setting only `userAgent` does not suppress `Sec-CH-UA*` headers or `navigator.userAgentData` — `userAgentMetadata` is required for that. Serialized but ignored on iOS/macOS/Linux.
+
 ## 1.4.0-beta.3
 
 - Added `PlatformContainerController` class with `getAllContainerNames`, `hasContainer`, `deleteContainer` methods for enumerating and deleting persistent named storage containers (supported on Android, iOS 17+, macOS 14+, Linux WPE WebKit 2.40+)

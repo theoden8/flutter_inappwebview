@@ -518,6 +518,13 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
             WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
       WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, customSettings.requestedWithHeaderOriginAllowList);
     }
+    // [WebSpace fork patch] Apply UA-CH metadata if present.
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)
+        && customSettings.userAgentMetadata != null) {
+      WebSettingsCompat.setUserAgentMetadata(
+          settings,
+          buildUserAgentMetadata(customSettings.userAgentMetadata));
+    }
 
     contentBlockerHandler.getRuleList().clear();
     for (Map<String, Map<String, Object>> contentBlocker : customSettings.contentBlockers) {
@@ -1228,6 +1235,15 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
             !Util.objEquals(customSettings.requestedWithHeaderOriginAllowList, newCustomSettings.requestedWithHeaderOriginAllowList) &&
             WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
       WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, newCustomSettings.requestedWithHeaderOriginAllowList);
+    }
+    // [WebSpace fork patch] Apply UA-CH metadata diff in setSettings.
+    if (newSettingsMap.get("userAgentMetadata") != null
+        && !Util.objEquals(customSettings.userAgentMetadata, newCustomSettings.userAgentMetadata)
+        && WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)
+        && newCustomSettings.userAgentMetadata != null) {
+      WebSettingsCompat.setUserAgentMetadata(
+          settings,
+          buildUserAgentMetadata(newCustomSettings.userAgentMetadata));
     }
 
     if (plugin != null) {
@@ -2284,6 +2300,86 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
     }
     plugin = null;
     loadUrl("about:blank");
+  }
+
+  // [WebSpace fork patch] Convert the wire-format UA-CH metadata Map into an
+  // androidx.webkit.UserAgentMetadata via its Builder. Missing keys fall back
+  // to the Builder defaults; an absent or empty brandVersionList simply skips
+  // setBrandVersionList. Throws IllegalArgumentException only on malformed
+  // input (wrong type, missing required BrandVersion fields), never on
+  // absent fields. Caller must gate on WebViewFeature.USER_AGENT_METADATA.
+  @SuppressWarnings({"unchecked"})
+  private static androidx.webkit.UserAgentMetadata buildUserAgentMetadata(
+      Map<String, Object> map) {
+    androidx.webkit.UserAgentMetadata.Builder builder =
+        new androidx.webkit.UserAgentMetadata.Builder();
+
+    Object brandList = map.get("brandVersionList");
+    if (brandList instanceof List) {
+      List<androidx.webkit.UserAgentMetadata.BrandVersion> brands = new ArrayList<>();
+      for (Object entry : (List<Object>) brandList) {
+        if (!(entry instanceof Map)) {
+          throw new IllegalArgumentException(
+              "userAgentMetadata.brandVersionList entries must be Map, got: " + entry);
+        }
+        Map<String, Object> bv = (Map<String, Object>) entry;
+        Object brand = bv.get("brand");
+        Object majorVersion = bv.get("majorVersion");
+        Object fullVersion = bv.get("fullVersion");
+        if (!(brand instanceof String) || !(majorVersion instanceof String)
+            || !(fullVersion instanceof String)) {
+          throw new IllegalArgumentException(
+              "userAgentMetadata.brandVersionList entry must have String brand/majorVersion/fullVersion, got: " + bv);
+        }
+        brands.add(new androidx.webkit.UserAgentMetadata.BrandVersion.Builder()
+            .setBrand((String) brand)
+            .setMajorVersion((String) majorVersion)
+            .setFullVersion((String) fullVersion)
+            .build());
+      }
+      if (!brands.isEmpty()) {
+        builder.setBrandVersionList(brands);
+      }
+    } else if (brandList != null) {
+      throw new IllegalArgumentException(
+          "userAgentMetadata.brandVersionList must be a List, got: " + brandList);
+    }
+
+    Object fullVersion = map.get("fullVersion");
+    if (fullVersion instanceof String) {
+      builder.setFullVersion((String) fullVersion);
+    }
+    Object platform = map.get("platform");
+    if (platform instanceof String) {
+      builder.setPlatform((String) platform);
+    }
+    Object platformVersion = map.get("platformVersion");
+    if (platformVersion instanceof String) {
+      builder.setPlatformVersion((String) platformVersion);
+    }
+    Object architecture = map.get("architecture");
+    if (architecture instanceof String) {
+      builder.setArchitecture((String) architecture);
+    }
+    Object model = map.get("model");
+    if (model instanceof String) {
+      builder.setModel((String) model);
+    }
+    Object mobile = map.get("mobile");
+    if (mobile instanceof Boolean) {
+      builder.setMobile((Boolean) mobile);
+    }
+    Object bitness = map.get("bitness");
+    if (bitness instanceof Number) {
+      builder.setBitness(((Number) bitness).intValue());
+    }
+    Object wow64 = map.get("wow64");
+    if (wow64 instanceof Boolean) {
+      builder.setWow64((Boolean) wow64);
+    }
+    // formFactors is part of the Dart model but not exposed by androidx.webkit
+    // 1.14.0's UserAgentMetadata.Builder, so it is silently ignored here.
+    return builder.build();
   }
 
   @Override

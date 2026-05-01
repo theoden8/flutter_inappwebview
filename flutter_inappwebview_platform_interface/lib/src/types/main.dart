@@ -185,6 +185,8 @@ export 'url_request_cache_policy.dart'
 export 'url_request_network_service_type.dart'
     show URLRequestNetworkServiceType, IOSURLRequestNetworkServiceType;
 export 'url_response.dart' show URLResponse, IOSURLResponse;
+export 'user_agent_metadata.dart'
+    show UserAgentMetadata, BrandVersion; // [WebSpace fork patch] UA-CH metadata
 export 'user_preferred_content_mode.dart' show UserPreferredContentMode;
 export 'user_script.dart' show UserScript;
 export 'user_script_injection_time.dart' show UserScriptInjectionTime;

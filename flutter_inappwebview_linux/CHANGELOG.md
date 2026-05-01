@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] `InAppWebViewSettings.userAgentMetadata` is serialized through to native but WPE has no UA-CH plumbing and the setting is silently ignored. Kept so backup JSON stays portable across platforms.
+
 ## 0.1.0-beta.2
 
 - Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) backed by `<XDG_DATA_HOME>/flutter_inappwebview/containers/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/`.
