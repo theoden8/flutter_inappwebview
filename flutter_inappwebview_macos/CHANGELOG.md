@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] `InAppWebViewSettings.userAgentMetadata` is serialized through to native but has no WKWebView equivalent and is silently ignored. Kept so backup JSON stays portable across platforms.
+
 ## 1.2.0-beta.3
 
 - Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData`) on macOS 14+ via `WKWebsiteDataStore(forIdentifier:)`, with a `UserDefaults` registry mapping container ids to data store identifiers
