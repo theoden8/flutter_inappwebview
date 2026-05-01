@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] `InAppWebViewSettings.userAgentMetadata` is serialized through to native but has no WKWebView equivalent and is silently ignored. Kept so backup JSON stays portable across platforms.
+
 ## 1.2.0-beta.3
 
 - Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData`) on iOS 17+ via `WKWebsiteDataStore.fetchAllDataStoreIdentifiers`, `WKWebsiteDataStore.remove(forIdentifier:)` and `WKWebsiteDataStore.removeData(ofTypes:modifiedSince:)`. The plugin maintains a `containerId ↔ UUID` registry in `UserDefaults` so listing returns the original strings rather than UUIDs. `clearContainerData` works while a WKWebView is still bound to the data store, scoped to `allWebsiteDataTypes()` since `.distantPast`. `WKWebsiteDataStore` wrappers are cached process-wide so every WebView joining a container and every controller op operate on the same wrapper — mirrors the Linux `container_session_cache` pattern, removes one source of in-use refcount confusion for `remove(forIdentifier:)`
