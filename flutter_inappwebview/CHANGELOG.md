@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] Added `UserAgentMetadata` setting (`InAppWebViewSettings.userAgentMetadata`). On Android wires through to `androidx.webkit.WebSettingsCompat.setUserAgentMetadata` to control `Sec-CH-UA*` HTTP headers and `navigator.userAgentData`. Serialized but ignored on iOS/macOS/Linux.
+
 ## 6.2.0-beta.3
 
 - Added `ContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData`) for enumerating, clearing and deleting named persistent storage containers. `clearContainerData` empties a container's cookies, DOM storage, IndexedDB, ServiceWorkers and HTTP cache without removing the container itself — works while WebViews are still bound, which `deleteContainer` cannot
