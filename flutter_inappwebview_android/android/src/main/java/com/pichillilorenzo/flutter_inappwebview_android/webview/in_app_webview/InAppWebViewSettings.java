@@ -147,6 +147,11 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
   public byte[] defaultVideoPoster;
   @Nullable
   public Set<String> requestedWithHeaderOriginAllowList;
+  // [WebSpace fork patch] User-Agent Client Hints metadata override.
+  // Carried as Map<String, Object> off the wire and turned into an
+  // androidx.webkit.UserAgentMetadata in InAppWebView.buildUserAgentMetadata.
+  @Nullable
+  public Map<String, Object> userAgentMetadata = null;
   @Nullable
   public Set<Pattern> javaScriptHandlersOriginAllowList;
   public Boolean javaScriptHandlersForMainFrameOnly = false;
@@ -450,6 +455,10 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
         case "requestedWithHeaderOriginAllowList":
           requestedWithHeaderOriginAllowList = new HashSet<>((List<String>) value);
           break;
+        // [WebSpace fork patch] UA-CH metadata payload from Dart.
+        case "userAgentMetadata":
+          userAgentMetadata = (Map<String, Object>) value;
+          break;
         case "javaScriptHandlersOriginAllowList":
           javaScriptHandlersOriginAllowList = new HashSet<>();
           for (String pattern : (List<String>) value) {
@@ -585,6 +594,8 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
     settings.put("defaultVideoPoster", defaultVideoPoster);
     settings.put("requestedWithHeaderOriginAllowList",
             requestedWithHeaderOriginAllowList != null ? new ArrayList<>(requestedWithHeaderOriginAllowList) : null);
+    // [WebSpace fork patch] UA-CH metadata round-trip — passes the Map back to Dart unchanged.
+    settings.put("userAgentMetadata", userAgentMetadata);
     settings.put("javaScriptHandlersOriginAllowList",
             javaScriptHandlersOriginAllowList != null ? new ArrayList<String>() {{
               for (Pattern pattern : javaScriptHandlersOriginAllowList) {
@@ -698,6 +709,33 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
       }
       if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
         realSettings.put("requestedWithHeaderOriginAllowList", new ArrayList<>(WebSettingsCompat.getRequestedWithHeaderOriginAllowList(settings)));
+      }
+      // [WebSpace fork patch] UA-CH metadata round-trip read from native.
+      if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+        androidx.webkit.UserAgentMetadata uaMetadata = WebSettingsCompat.getUserAgentMetadata(settings);
+        if (uaMetadata != null) {
+          Map<String, Object> uaMap = new HashMap<>();
+          List<Map<String, Object>> brandList = new ArrayList<>();
+          if (uaMetadata.getBrandVersionList() != null) {
+            for (androidx.webkit.UserAgentMetadata.BrandVersion bv : uaMetadata.getBrandVersionList()) {
+              Map<String, Object> bvMap = new HashMap<>();
+              bvMap.put("brand", bv.getBrand());
+              bvMap.put("majorVersion", bv.getMajorVersion());
+              bvMap.put("fullVersion", bv.getFullVersion());
+              brandList.add(bvMap);
+            }
+          }
+          uaMap.put("brandVersionList", brandList);
+          uaMap.put("fullVersion", uaMetadata.getFullVersion());
+          uaMap.put("platform", uaMetadata.getPlatform());
+          uaMap.put("platformVersion", uaMetadata.getPlatformVersion());
+          uaMap.put("architecture", uaMetadata.getArchitecture());
+          uaMap.put("model", uaMetadata.getModel());
+          uaMap.put("mobile", uaMetadata.isMobile());
+          uaMap.put("bitness", uaMetadata.getBitness());
+          uaMap.put("wow64", uaMetadata.isWow64());
+          realSettings.put("userAgentMetadata", uaMap);
+        }
       }
     }
     return realSettings;

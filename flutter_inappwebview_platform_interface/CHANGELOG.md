@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] Added `UserAgentMetadata` and `BrandVersion` types and the `InAppWebViewSettings.userAgentMetadata` setting. Maps to `androidx.webkit.WebSettingsCompat.setUserAgentMetadata` on Android. Setting only `userAgent` does not suppress `Sec-CH-UA*` headers or `navigator.userAgentData` — `userAgentMetadata` is required for that. Serialized but ignored on iOS/macOS/Linux.
+
 ## 1.4.0-beta.3
 
 - Updated `flutter_inappwebview_internal_annotations` dependency from `^1.2.0` to `^1.3.0`

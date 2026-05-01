@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] `InAppWebViewSettings.userAgentMetadata` is serialized through to native but has no WKWebView equivalent and is silently ignored. Kept so backup JSON stays portable across platforms.
+
 ## 1.2.0-beta.3
 
 - Updated flutter_inappwebview_platform_interface version to ^1.4.0-beta.3

@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] Added `UserAgentMetadata` setting (`InAppWebViewSettings.userAgentMetadata`). On Android wires through to `androidx.webkit.WebSettingsCompat.setUserAgentMetadata` to control `Sec-CH-UA*` HTTP headers and `navigator.userAgentData`. Serialized but ignored on iOS/macOS/Linux.
+
 ## 6.2.0-beta.3
 
 - Added Linux support

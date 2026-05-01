@@ -21,6 +21,7 @@ import '../types/scrollbar_style.dart';
 import '../types/scrollview_content_inset_adjustment_behavior.dart';
 import '../types/scrollview_deceleration_rate.dart';
 import '../types/selection_granularity.dart';
+import '../types/user_agent_metadata.dart'; // [WebSpace fork patch] UA-CH metadata
 import '../types/user_preferred_content_mode.dart';
 import '../types/vertical_scrollbar_position.dart';
 
@@ -1432,6 +1433,28 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     ],
   )
   Set<String>? requestedWithHeaderOriginAllowList;
+
+  // [WebSpace fork patch] User-Agent Client Hints metadata override.
+  // Setting only [userAgent] does NOT suppress Sec-CH-UA*/navigator.userAgentData
+  // on Android — Chromium WebView still emits the real engine + OS values.
+  // Wires through to androidx.webkit's WebSettingsCompat.setUserAgentMetadata.
+  // Serialized but ignored on iOS/macOS/Linux (no equivalent native API).
+  ///User-Agent Client Hints metadata. Controls both `Sec-CH-UA*` HTTP request
+  ///headers and the `navigator.userAgentData` JS surface on Android. When
+  ///`null`, only the low-entropy UA-CH headers derived from the system default
+  ///user agent are emitted.
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName: "WebSettingsCompat.setUserAgentMetadata",
+        apiUrl:
+            "https://developer.android.com/reference/androidx/webkit/WebSettingsCompat#setUserAgentMetadata(android.webkit.WebSettings,androidx.webkit.UserAgentMetadata)",
+        note:
+            "available on Android only if [WebViewFeature.USER_AGENT_METADATA] feature is supported.",
+      ),
+    ],
+  )
+  UserAgentMetadata? userAgentMetadata;
 
   ///Set to `true` to disable the bouncing of the WebView when the scrolling has reached an edge of the content. The default value is `false`.
   @SupportedPlatforms(platforms: [IOSPlatform()])
@@ -3372,6 +3395,7 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     this.enterpriseAuthenticationAppLinkPolicyEnabled = true,
     this.defaultVideoPoster,
     this.requestedWithHeaderOriginAllowList,
+    this.userAgentMetadata, // [WebSpace fork patch] UA-CH metadata
     this.disallowOverScroll = false,
     this.enableViewportScale = false,
     this.suppressesIncrementalRendering = false,
