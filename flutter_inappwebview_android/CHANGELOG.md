@@ -1,3 +1,7 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] Wired `InAppWebViewSettings.userAgentMetadata` through to `androidx.webkit.WebSettingsCompat.setUserAgentMetadata`. Apply path is gated on `WebViewFeature.USER_AGENT_METADATA`. Round-trip read added in `getRealSettings`. No bump to androidx.webkit (already at 1.14.0; the API landed in 1.8.0).
+
 ## 1.2.0-beta.3
 
 - Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData`) wrapping `androidx.webkit.ProfileStore`; methods return empty/false when `WebViewFeature.MULTI_PROFILE` is unsupported. `clearContainerData` composes per-profile `CookieManager.removeAllCookies`, `WebStorage.deleteAllData` and `GeolocationPermissions.clearAll`; HTTP cache (per-WebView) and global `ServiceWorkerControllerCompat` are documented as not reached by this call
