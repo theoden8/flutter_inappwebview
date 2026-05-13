@@ -2212,8 +2212,18 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                             // synchronously on the main thread restores the credential override.
                             // Re-introduces the main-thread warning from upstream issue #1924; that
                             // warning is benign and acceptable for the privacy-v1 fork.
+                            //
+                            // [WebSpace fork patch] macOS 15+ also re-evaluates the trust object
+                            // inside URLCredential(trust:) and rejects it unless we pre-evaluate
+                            // WITH the exception data applied. SecTrustSetExceptions alone is not
+                            // enough; SecTrustEvaluateWithError after it locks the verdict so the
+                            // network layer's re-check matches. We deliberately ignore the return
+                            // value — the side effect of baking the exception into the trust
+                            // object is what makes the later OS re-check accept it.
                             let exceptions = SecTrustCopyExceptions(serverTrust)
                             SecTrustSetExceptions(serverTrust, exceptions)
+                            var trustError: CFError?
+                            SecTrustEvaluateWithError(serverTrust, &trustError)
                             let credential = URLCredential(trust: serverTrust)
                             completionHandler(.useCredential, credential)
                             break
