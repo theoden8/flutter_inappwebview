@@ -2205,13 +2205,17 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                             completionHandler(.cancelAuthenticationChallenge, nil)
                             break
                         case 1:
-                            // workaround for https://github.com/pichillilorenzo/flutter_inappwebview/issues/1924
-                            DispatchQueue.global().async {
-                                let exceptions = SecTrustCopyExceptions(serverTrust)
-                                SecTrustSetExceptions(serverTrust, exceptions)
-                                let credential = URLCredential(trust: serverTrust)
-                                completionHandler(.useCredential, credential)
-                            }
+                            // [WebSpace fork patch] macOS 15+ WKWebView ignores URLCredential(trust:)
+                            // when completionHandler is invoked off the main thread — nw_protocol_boringssl
+                            // enters a failed state before the async response arrives and the load
+                            // fails with NSURLErrorSecureConnectionFailed (-1200). Calling
+                            // synchronously on the main thread restores the credential override.
+                            // Re-introduces the main-thread warning from upstream issue #1924; that
+                            // warning is benign and acceptable for the privacy-v1 fork.
+                            let exceptions = SecTrustCopyExceptions(serverTrust)
+                            SecTrustSetExceptions(serverTrust, exceptions)
+                            let credential = URLCredential(trust: serverTrust)
+                            completionHandler(.useCredential, credential)
                             break
                         default:
                             InAppWebView.credentialsProposed = []
