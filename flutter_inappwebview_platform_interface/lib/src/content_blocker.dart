@@ -284,7 +284,13 @@ class ContentBlockerTrigger {
     return ContentBlockerTrigger(
       urlFilter: map["url-filter"],
       ifFrameUrl: List<String>.from(map["if-frame-url"] ?? []),
-      urlFilterIsCaseSensitive: map["url-filter-is-case-sensitive"],
+      // Default to false when the key is absent. The
+      // WKContentRuleList JSON shape treats this as an optional
+      // boolean defaulting to false; adblock-rust's
+      // `into_content_blocking()` exporter omits the key when it
+      // would be false, so reading it raw threw
+      // "type 'Null' is not a subtype of type 'bool'".
+      urlFilterIsCaseSensitive: map["url-filter-is-case-sensitive"] ?? false,
       ifDomain: List<String>.from(map["if-domain"] ?? []),
       unlessDomain: List<String>.from(map["unless-domain"] ?? []),
       resourceType: resourceType,
