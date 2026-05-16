@@ -104,32 +104,13 @@ public class InAppBrowserWebViewController: NSViewController, InAppBrowserDelega
             channelDelegate?.onBrowserCreated()
             webView?.runWindowBeforeCreatedCallbacks()
         } else {
-            if #available(macOS 10.13, *) {
-                if let contentBlockers = webView?.settings?.contentBlockers, contentBlockers.count > 0 {
-                    do {
-                        let jsonData = try JSONSerialization.data(withJSONObject: contentBlockers, options: [])
-                        let blockRules = String(data: jsonData, encoding: .utf8)
-                        WKContentRuleListStore.default().compileContentRuleList(
-                            forIdentifier: "ContentBlockingRules",
-                            encodedContentRuleList: blockRules) { (contentRuleList, error) in
-
-                                if let error = error {
-                                    print(error.localizedDescription)
-                                    return
-                                }
-
-                                let configuration = self.webView!.configuration
-                                configuration.userContentController.add(contentRuleList!)
-
-                                self.initLoad()
-                        }
-                        return
-                    } catch {
-                        print(error.localizedDescription)
-                    }
-                }
+            if #available(macOS 10.13, *), let webView = webView,
+               let contentBlockers = webView.settings?.contentBlockers, contentBlockers.count > 0 {
+                ContentRuleListCache.apply(
+                    contentBlockers: contentBlockers,
+                    to: webView.configuration.userContentController
+                )
             }
-            
             initLoad()
         }
     }
