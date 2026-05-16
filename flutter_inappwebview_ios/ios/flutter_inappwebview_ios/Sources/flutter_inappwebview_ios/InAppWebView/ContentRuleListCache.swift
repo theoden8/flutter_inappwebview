@@ -9,11 +9,15 @@
 //  level and for tens of thousands of ABP rules can take several
 //  seconds, blocking initial page load for every new tab.
 //
-//  This helper hashes the JSON, queries the WKContentRuleListStore
-//  disk cache by hashed identifier first, and only compiles when
-//  the disk cache misses. The store persists across app launches,
-//  so once an identifier compiles the result survives until the
-//  ruleset changes (different hash) or the OS evicts it.
+//  Strategy:
+//   - Caller supplies an opaque identifier (or we hash the JSON
+//     locally). Identifier is the WKContentRuleListStore key.
+//   - lookUpContentRuleList by identifier first → cheap when warm.
+//   - On miss, compile once and coalesce concurrent compile
+//     requests so N parallel WebView creates trigger one compile.
+//   - After install, walk the store and purge any iaw-rl-* entry
+//     that isn't the active identifier. Without this, every rule
+//     edit leaves the previous compiled bytecode on disk forever.
 //
 
 import Foundation
@@ -22,19 +26,31 @@ import CommonCrypto
 
 @available(iOS 11.0, *)
 public class ContentRuleListCache {
-    private static let identifierPrefix = "iaw-rl-"
+    /// Prefix every identifier we own. Used by [purgeStale] to find
+    /// our entries without touching identifiers a different consumer
+    /// of WKContentRuleListStore in the same app may have installed.
+    public static let identifierPrefix = "iaw-rl-"
+
     private static let inFlightQueue = DispatchQueue(
         label: "com.pichillilorenzo.flutter_inappwebview.ContentRuleListCache.inflight"
     )
     private static var inFlight: [String: [(WKContentRuleList?) -> Void]] = [:]
 
     /// Apply the content rule list described by `contentBlockers` to
-    /// `controller`. Looks the compiled list up by hash first; if the
-    /// store doesn't have it, compiles once and feeds every caller
-    /// waiting on the same identifier. Calls `completion` on the main
-    /// queue with the installed rule list (or nil on failure).
+    /// `controller`.
+    ///
+    /// Identifier resolution:
+    ///   1. `identifier` parameter (caller-supplied, e.g. a Dart-side
+    ///      sha256 already computed) wins when provided.
+    ///   2. Otherwise the JSON body is hashed (sha256) so identical
+    ///      payloads converge on the same WKContentRuleListStore
+    ///      entry across WebView creations and across launches.
+    ///
+    /// The identifier is always prefixed with [identifierPrefix] so
+    /// purgeStale can find this consumer's entries unambiguously.
     public static func apply(
         contentBlockers: [[String: [String: Any]]],
+        identifier: String? = nil,
         to controller: WKUserContentController,
         completion: ((WKContentRuleList?) -> Void)? = nil
     ) {
@@ -60,26 +76,57 @@ public class ContentRuleListCache {
             return
         }
 
-        let identifier = identifierPrefix + sha256Hex(blockRules)
+        let resolvedId: String
+        if let caller = identifier, !caller.isEmpty {
+            resolvedId = identifierPrefix + caller
+        } else {
+            resolvedId = identifierPrefix + sha256Hex(blockRules)
+        }
 
-        // Drop any previously-installed rule list whose identifier
-        // doesn't match the one we're about to install. Different
-        // identifier → different ruleset, so the old one's actions
-        // would still fire alongside the new ones if left attached.
-        controller.removeContentRuleLists(notMatching: identifier)
+        // WKUserContentController has no public API to enumerate the
+        // attached rule lists, so we removeAll and re-add after the
+        // lookup resolves. The remove path is a metadata flip — cheap.
+        controller.removeAllContentRuleLists()
 
-        WKContentRuleListStore.default().lookUpContentRuleList(forIdentifier: identifier) { existing, _ in
+        WKContentRuleListStore.default().lookUpContentRuleList(forIdentifier: resolvedId) { existing, _ in
             if let existing = existing {
                 controller.add(existing)
                 completion?(existing)
+                purgeStale(except: resolvedId)
                 return
             }
             compileAndInstall(
-                identifier: identifier,
+                identifier: resolvedId,
                 blockRules: blockRules,
                 controller: controller,
                 completion: completion
             )
+        }
+    }
+
+    /// Remove every `iaw-rl-*` entry from WKContentRuleListStore
+    /// except the one currently active. Stops stale compiled
+    /// bytecode from accumulating on disk forever after each rule
+    /// edit. Safe to call from any thread; the store hops to its
+    /// own queue internally.
+    ///
+    /// `WKContentRuleListStore.getAvailableContentRuleListIdentifiers`
+    /// is a documented public API (iOS 11+, macOS 10.13+) and the
+    /// only way to enumerate the store without keeping our own
+    /// sidecar registry. Pass nil from upstream callers that don't
+    /// track identifiers — we'll wipe every entry we own.
+    public static func purgeStale(except keepIdentifier: String?) {
+        WKContentRuleListStore.default().getAvailableContentRuleListIdentifiers { ids in
+            guard let ids = ids else { return }
+            for id in ids {
+                guard id.hasPrefix(identifierPrefix) else { continue }
+                if id == keepIdentifier { continue }
+                WKContentRuleListStore.default().removeContentRuleList(forIdentifier: id) { error in
+                    if let error = error {
+                        print("[flutter_inappwebview] failed to purge stale rule list \(id): \(error.localizedDescription)")
+                    }
+                }
+            }
         }
     }
 
@@ -126,6 +173,13 @@ public class ContentRuleListCache {
             for waiter in waiters {
                 waiter(ruleList)
             }
+
+            // Purge stale identifiers AFTER the new one is in the
+            // store, so a transient store enumeration during compile
+            // can't return an empty set.
+            if ruleList != nil {
+                purgeStale(except: identifier)
+            }
         }
     }
 
@@ -136,22 +190,5 @@ public class ContentRuleListCache {
             _ = CC_SHA256(buf.baseAddress, CC_LONG(data.count), &digest)
         }
         return digest.map { String(format: "%02x", $0) }.joined()
-    }
-}
-
-@available(iOS 11.0, *)
-private extension WKUserContentController {
-    /// Remove every installed rule list whose identifier is not
-    /// `keepIdentifier`. Cheap when nothing is installed; the
-    /// userContentController doesn't expose its installed identifiers
-    /// so we fall through to removeAll when we can't introspect.
-    func removeContentRuleLists(notMatching keepIdentifier: String) {
-        // WKUserContentController has no public API to enumerate the
-        // currently-attached rule lists. The safe default is to
-        // remove all and let the caller re-add the desired one — the
-        // remove path is a metadata flip, not a recompile, so it's
-        // cheap. The caller adds back the rule list once
-        // apply() resolves the lookup/compile.
-        removeAllContentRuleLists()
     }
 }
