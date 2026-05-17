@@ -6,11 +6,13 @@ namespace flutter_inappwebview_plugin {
 
 NavigationAction::NavigationAction(std::shared_ptr<URLRequest> request, bool isForMainFrame,
                                    const std::optional<bool>& isRedirect,
-                                   const std::optional<NavigationActionType>& navigationType)
+                                   const std::optional<NavigationActionType>& navigationType,
+                                   bool hasGesture)
     : request(std::move(request)),
       isForMainFrame(isForMainFrame),
       isRedirect(isRedirect),
-      navigationType(navigationType) {}
+      navigationType(navigationType),
+      hasGesture(hasGesture) {}
 
 FlValue* NavigationAction::toFlValue() const {
   return to_fl_map({
@@ -18,6 +20,7 @@ FlValue* NavigationAction::toFlValue() const {
       {"isForMainFrame", make_fl_value(isForMainFrame)},
       {"isRedirect", make_fl_value(isRedirect)},
       {"navigationType", make_fl_value(NavigationActionTypeToInteger(navigationType))},
+      {"hasGesture", make_fl_value(hasGesture)},
   });
 }
 

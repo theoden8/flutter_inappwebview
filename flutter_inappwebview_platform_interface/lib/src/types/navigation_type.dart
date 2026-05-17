@@ -29,6 +29,12 @@ class NavigationType_ {
         value: 0,
       ),
       EnumWindowsPlatform(value: 0),
+      EnumLinuxPlatform(
+        apiName: 'WEBKIT_NAVIGATION_TYPE_LINK_CLICKED',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/enum.NavigationType.html',
+        value: 0,
+      ),
     ],
   )
   static const LINK_ACTIVATED = const NavigationType_._internal(
@@ -48,6 +54,12 @@ class NavigationType_ {
         apiName: 'WKNavigationType.formSubmitted',
         apiUrl:
             'https://developer.apple.com/documentation/webkit/wknavigationtype/formsubmitted',
+        value: 1,
+      ),
+      EnumLinuxPlatform(
+        apiName: 'WEBKIT_NAVIGATION_TYPE_FORM_SUBMITTED',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/enum.NavigationType.html',
         value: 1,
       ),
     ],
@@ -77,6 +89,12 @@ class NavigationType_ {
             'https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/webview2-idl?view=webview2-1.0.2210.55#corewebview2_navigation_kind',
         value: 1,
       ),
+      EnumLinuxPlatform(
+        apiName: 'WEBKIT_NAVIGATION_TYPE_BACK_FORWARD',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/enum.NavigationType.html',
+        value: 2,
+      ),
     ],
   )
   static const BACK_FORWARD = const NavigationType_._internal('BACK_FORWARD');
@@ -102,6 +120,12 @@ class NavigationType_ {
             'https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/webview2-idl?view=webview2-1.0.2210.55#corewebview2_navigation_kind',
         value: 2,
       ),
+      EnumLinuxPlatform(
+        apiName: 'WEBKIT_NAVIGATION_TYPE_RELOAD',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/enum.NavigationType.html',
+        value: 3,
+      ),
     ],
   )
   static const RELOAD = const NavigationType_._internal('RELOAD');
@@ -119,6 +143,12 @@ class NavigationType_ {
         apiName: 'WKNavigationType.formSubmitted',
         apiUrl:
             'https://developer.apple.com/documentation/webkit/wknavigationtype/formresubmitted',
+        value: 4,
+      ),
+      EnumLinuxPlatform(
+        apiName: 'WEBKIT_NAVIGATION_TYPE_FORM_RESUBMITTED',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/enum.NavigationType.html',
         value: 4,
       ),
     ],
@@ -143,6 +173,12 @@ class NavigationType_ {
         value: -1,
       ),
       EnumWindowsPlatform(value: 3),
+      EnumLinuxPlatform(
+        apiName: 'WEBKIT_NAVIGATION_TYPE_OTHER',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/enum.NavigationType.html',
+        value: -1,
+      ),
     ],
   )
   static const OTHER = const NavigationType_._internal('OTHER');
