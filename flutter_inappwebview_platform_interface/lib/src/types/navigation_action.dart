@@ -45,6 +45,11 @@ class NavigationAction_ {
         note:
             "Available only if the request is associated to the [PlatformWebViewCreationParams.onCreateWindow] event",
       ),
+      LinuxPlatform(
+        apiName: "webkit_navigation_action_is_user_gesture",
+        apiUrl:
+            "https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.NavigationAction.is_user_gesture.html",
+      ),
     ],
   )
   bool? hasGesture;

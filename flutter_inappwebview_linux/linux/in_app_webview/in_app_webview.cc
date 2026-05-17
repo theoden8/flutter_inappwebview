@@ -3932,22 +3932,31 @@ gboolean InAppWebView::OnDecidePolicy(WebKitWebView* web_view, WebKitPolicyDecis
         case WEBKIT_NAVIGATION_TYPE_LINK_CLICKED:
           navActionType = NavigationActionType::linkActivated;
           break;
+        case WEBKIT_NAVIGATION_TYPE_FORM_SUBMITTED:
+          navActionType = NavigationActionType::formSubmitted;
+          break;
         case WEBKIT_NAVIGATION_TYPE_BACK_FORWARD:
           navActionType = NavigationActionType::backForward;
           break;
         case WEBKIT_NAVIGATION_TYPE_RELOAD:
           navActionType = NavigationActionType::reload;
           break;
+        case WEBKIT_NAVIGATION_TYPE_FORM_RESUBMITTED:
+          navActionType = NavigationActionType::formResubmitted;
+          break;
         default:
           navActionType = NavigationActionType::other;
           break;
       }
 
+      bool has_gesture = webkit_navigation_action_is_user_gesture(nav_action);
+
       // Create NavigationAction
       auto navigationAction = std::make_shared<NavigationAction>(
           urlRequest, is_for_main_frame,
           std::nullopt,  // isRedirect - not easily available in WebKit
-          navActionType);
+          navActionType,
+          has_gesture);
 
       // Create callback to handle the response
       auto callback = std::make_unique<WebViewChannelDelegate::ShouldOverrideUrlLoadingCallback>();

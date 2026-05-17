@@ -26,6 +26,7 @@ class NavigationAction {
   ///    - On Android < 21, this is always `false`
   ///- Windows WebView2:
   ///    - Available only if the request is associated to the [PlatformWebViewCreationParams.onCreateWindow] event
+  ///- Linux WPE WebKit ([Official API - webkit_navigation_action_is_user_gesture](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.NavigationAction.is_user_gesture.html))
   bool? hasGesture;
 
   ///Use [sourceFrame] instead.

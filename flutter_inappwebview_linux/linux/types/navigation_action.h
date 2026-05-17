@@ -10,7 +10,18 @@
 
 namespace flutter_inappwebview_plugin {
 
-enum class NavigationActionType { linkActivated = 0, backForward, reload, other };
+// Values must match NavigationType native values in
+// flutter_inappwebview_platform_interface/lib/src/types/navigation_type.g.dart
+// (TargetPlatform.linux branch). The scheme mirrors WKNavigationType
+// (Apple WebKit), so OTHER is -1 not 5 as WebKitGTK uses.
+enum class NavigationActionType {
+  linkActivated = 0,
+  formSubmitted = 1,
+  backForward = 2,
+  reload = 3,
+  formResubmitted = 4,
+  other = -1
+};
 
 inline std::optional<int64_t> NavigationActionTypeToInteger(
     const std::optional<NavigationActionType>& action) {
@@ -23,10 +34,12 @@ class NavigationAction {
   const bool isForMainFrame;
   const std::optional<bool> isRedirect;
   const std::optional<NavigationActionType> navigationType;
+  const bool hasGesture;
 
   NavigationAction(std::shared_ptr<URLRequest> request, bool isForMainFrame,
                    const std::optional<bool>& isRedirect,
-                   const std::optional<NavigationActionType>& navigationType);
+                   const std::optional<NavigationActionType>& navigationType,
+                   bool hasGesture);
   ~NavigationAction() = default;
 
   FlValue* toFlValue() const;

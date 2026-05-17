@@ -1,8 +1,28 @@
 #include "create_window_action.h"
 
 #include "../utils/flutter.h"
+#include "navigation_action.h"
 
 namespace flutter_inappwebview_plugin {
+
+namespace {
+int64_t WebKitNavTypeToPluginNavType(WebKitNavigationType nav_type) {
+  switch (nav_type) {
+    case WEBKIT_NAVIGATION_TYPE_LINK_CLICKED:
+      return static_cast<int64_t>(NavigationActionType::linkActivated);
+    case WEBKIT_NAVIGATION_TYPE_FORM_SUBMITTED:
+      return static_cast<int64_t>(NavigationActionType::formSubmitted);
+    case WEBKIT_NAVIGATION_TYPE_BACK_FORWARD:
+      return static_cast<int64_t>(NavigationActionType::backForward);
+    case WEBKIT_NAVIGATION_TYPE_RELOAD:
+      return static_cast<int64_t>(NavigationActionType::reload);
+    case WEBKIT_NAVIGATION_TYPE_FORM_RESUBMITTED:
+      return static_cast<int64_t>(NavigationActionType::formResubmitted);
+    default:
+      return static_cast<int64_t>(NavigationActionType::other);
+  }
+}
+}  // namespace
 
 WindowFeatures::WindowFeatures(WebKitWindowProperties* properties) {
   if (properties == nullptr) {
@@ -54,8 +74,8 @@ CreateWindowAction::CreateWindowAction(WebKitNavigationAction* navigationAction,
       );
     }
 
-    navigationType =
-        static_cast<int64_t>(webkit_navigation_action_get_navigation_type(navigationAction));
+    navigationType = WebKitNavTypeToPluginNavType(
+        webkit_navigation_action_get_navigation_type(navigationAction));
     isUserGesture = webkit_navigation_action_is_user_gesture(navigationAction);
 
     // Get target frame name
