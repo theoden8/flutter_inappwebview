@@ -14,34 +14,37 @@ SslError::SslError(SslErrorType code, const std::optional<std::string>& message)
     : code(code), message(message) {}
 
 FlValue* SslError::toFlValue() const {
-  std::string codeStr;
+  // Dart's SslError.fromMap decodes `code` via SslErrorType.fromNativeValue
+  // (int), so emit an integer that matches the TargetPlatform.linux branch in
+  // flutter_inappwebview_platform_interface/lib/src/types/ssl_error_type.g.dart.
+  // Aligned with the Android scheme to keep cross-platform values consistent.
+  // INSECURE has no Dart equivalent and collapses to INVALID at the boundary.
+  int64_t codeInt;
   switch (code) {
     case SslErrorType::NOT_YET_VALID:
-      codeStr = "NOT_YET_VALID";
+      codeInt = 0;
       break;
     case SslErrorType::EXPIRED:
-      codeStr = "EXPIRED";
+      codeInt = 1;
       break;
     case SslErrorType::IDMISMATCH:
-      codeStr = "IDMISMATCH";
+      codeInt = 2;
       break;
     case SslErrorType::UNTRUSTED:
-      codeStr = "UNTRUSTED";
+      codeInt = 3;
       break;
     case SslErrorType::REVOKED:
-      codeStr = "REVOKED";
+      codeInt = 4;
       break;
     case SslErrorType::INSECURE:
-      codeStr = "INSECURE";
-      break;
     case SslErrorType::INVALID:
     default:
-      codeStr = "INVALID";
+      codeInt = 5;
       break;
   }
 
   return to_fl_map({
-      {"code", make_fl_value(codeStr)},
+      {"code", make_fl_value(codeInt)},
       {"message", make_fl_value(message)},
   });
 }
