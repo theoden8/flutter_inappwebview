@@ -79,6 +79,62 @@ void ContainerManager::HandleMethodCall(FlMethodCall* method_call) {
     return;
   }
 
+  if (string_equals(method, "clearContainerData")) {
+    // Clear everything in the container's WebKitNetworkSession
+    // without removing the session itself — works while WebViews are
+    // still bound, unlike deleteContainer. Goes through the cached
+    // session rather than recreating one because (a) the cache
+    // already holds a session if any WebView has joined this
+    // container this process, and (b) only the cached session has
+    // the right per-session data manager bound to the on-disk dirs.
+    //
+    // If the container hasn't been joined yet this process, there's
+    // no live session to clear — return false. Callers that need to
+    // wipe a never-joined container can use deleteContainer instead,
+    // which just removes the on-disk directories.
+    std::string id = get_fl_map_value<std::string>(args, "containerId", "");
+    if (id.empty()) {
+      g_autoptr(FlValue) result = fl_value_new_bool(false);
+      fl_method_call_respond_success(method_call, result, nullptr);
+      return;
+    }
+    auto& cache = container_session_cache();
+    auto it = cache.find(id);
+    if (it == cache.end() || it->second == nullptr) {
+      g_autoptr(FlValue) result = fl_value_new_bool(false);
+      fl_method_call_respond_success(method_call, result, nullptr);
+      return;
+    }
+    WebKitWebsiteDataManager* manager =
+        webkit_network_session_get_website_data_manager(it->second);
+    if (manager == nullptr) {
+      g_autoptr(FlValue) result = fl_value_new_bool(false);
+      fl_method_call_respond_success(method_call, result, nullptr);
+      return;
+    }
+    g_object_ref(method_call);
+    webkit_website_data_manager_clear(
+        manager, WEBKIT_WEBSITE_DATA_ALL,
+        0,        // timespan, 0 = since epoch
+        nullptr,  // cancellable
+        [](GObject* source, GAsyncResult* async_result, gpointer user_data) {
+          auto* call = static_cast<FlMethodCall*>(user_data);
+          GError* error = nullptr;
+          gboolean success = webkit_website_data_manager_clear_finish(
+              WEBKIT_WEBSITE_DATA_MANAGER(source), async_result, &error);
+          if (error != nullptr) {
+            errorLog(std::string("ContainerManager: clearContainerData failed: ") +
+                     error->message);
+            g_error_free(error);
+          }
+          g_autoptr(FlValue) result = fl_value_new_bool(success);
+          fl_method_call_respond_success(call, result, nullptr);
+          g_object_unref(call);
+        },
+        method_call);
+    return;
+  }
+
   fl_method_call_respond_not_implemented(method_call, nullptr);
 }
 

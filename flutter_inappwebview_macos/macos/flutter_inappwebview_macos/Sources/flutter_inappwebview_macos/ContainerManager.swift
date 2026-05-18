@@ -79,6 +79,11 @@ public class ContainerManager: ChannelDelegate {
                 result(false); return
             }
             deleteContainer(containerId, result: result)
+        case "clearContainerData":
+            guard let containerId = args?["containerId"] as? String, !containerId.isEmpty else {
+                result(false); return
+            }
+            clearContainerData(containerId, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -119,6 +124,18 @@ public class ContainerManager: ChannelDelegate {
                 ContainerManager.saveIdMap(map)
             }
             DispatchQueue.main.async { result(deleted) }
+        }
+    }
+
+    // Mirror of iOS clearContainerData. Same semantics: works while a
+    // WKWebView is still bound to the data store, scoped to
+    // allWebsiteDataTypes() since .distantPast, registry untouched.
+    private func clearContainerData(_ containerId: String, result: @escaping FlutterResult) {
+        let uuid = containerIdToUUID(containerId)
+        let store = WKWebsiteDataStore(forIdentifier: uuid)
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        store.removeData(ofTypes: types, modifiedSince: .distantPast) {
+            DispatchQueue.main.async { result(true) }
         }
     }
 

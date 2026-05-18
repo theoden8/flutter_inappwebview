@@ -1,6 +1,6 @@
 ## 1.2.0-beta.3
 
-- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) on macOS 14+ via `WKWebsiteDataStore.fetchAllDataStoreIdentifiers` / `WKWebsiteDataStore.remove(forIdentifier:)`. The plugin maintains a `containerId ↔ UUID` registry in `UserDefaults` so listing returns the original strings rather than UUIDs
+- Implemented `PlatformContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData`) on macOS 14+ via `WKWebsiteDataStore.fetchAllDataStoreIdentifiers`, `WKWebsiteDataStore.remove(forIdentifier:)` and `WKWebsiteDataStore.removeData(ofTypes:modifiedSince:)`. The plugin maintains a `containerId ↔ UUID` registry in `UserDefaults` so listing returns the original strings rather than UUIDs. `clearContainerData` works while a WKWebView is still bound to the data store, scoped to `allWebsiteDataTypes()` since `.distantPast`
 - Implemented per-WebView persistent profile partitioning via `InAppWebViewSettings.containerId` (macOS 14+), wiring `WKWebsiteDataStore(forIdentifier:)` in `preWKWebViewConfiguration(settings:)` with a SHA-256-derived stable UUID
 - Implemented per-WebView proxy via `InAppWebViewSettings.proxySettings` (macOS 14+) attached to the WebView's data store, so a profile-bound WebView genuinely uses its own proxy
 - `MyCookieManager` now resolves the per-profile `WKHTTPCookieStore` via the new `webViewId` argument so cookie ops on a profile-bound WebView land in the profile's jar

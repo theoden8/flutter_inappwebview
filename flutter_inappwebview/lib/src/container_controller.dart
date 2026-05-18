@@ -51,6 +51,12 @@ class ContainerController {
   Future<bool> deleteContainer(String containerId) =>
       platform.deleteContainer(containerId);
 
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.clearContainerData}
+  ///
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.clearContainerData.supported_platforms}
+  Future<bool> clearContainerData(String containerId) =>
+      platform.clearContainerData(containerId);
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   static bool isClassSupported({TargetPlatform? platform}) =>
       PlatformContainerController.static().isClassSupported(platform: platform);

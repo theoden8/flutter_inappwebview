@@ -1,6 +1,7 @@
 ## 1.4.0-beta.3
 
-- Added `PlatformContainerController` class with `getAllContainerNames`, `hasContainer`, `deleteContainer` methods for enumerating and deleting persistent named storage containers (supported on Android, iOS 17+, macOS 14+, Linux WPE WebKit 2.40+)
+- Added `PlatformContainerController` class with `getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData` methods for enumerating, clearing and deleting persistent named storage containers (supported on Android, iOS 17+, macOS 14+, Linux WPE WebKit 2.40+)
+- Added `clearContainerData(containerId)`: clears the data inside a container without removing the container itself. Works while WebViews are still bound — `deleteContainer`'s in-use silent no-op no longer blocks "clear site data" flows. Apple's `WKWebsiteDataStore.removeData(ofTypes:modifiedSince:)` and Linux's `webkit_website_data_manager_clear` are single-call comprehensive; Android composes per-subsystem clears on `androidx.webkit.Profile` and is documented as best-effort (HTTP cache + global ServiceWorkerControllerCompat aren't scoped to a profile)
 - Added `containerId` property to `InAppWebViewSettings` for joining a named storage container at WebView construction (Android `androidx.webkit.Profile`, iOS 17+ / macOS 14+ `WKWebsiteDataStore(forIdentifier:)`, Linux `WebKitNetworkSession`)
 - Added `proxySettings` property to `InAppWebViewSettings` for per-WebView proxy (iOS 17+ / macOS 14+ `WKWebsiteDataStore.proxyConfigurations`)
 - Updated `flutter_inappwebview_internal_annotations` dependency from `^1.2.0` to `^1.3.0`

@@ -256,6 +256,76 @@ abstract class PlatformContainerController extends PlatformInterface {
     );
   }
 
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.clearContainerData}
+  ///Clears the data inside the container named [containerId] without
+  ///removing the container itself. Use this when WebViews are still
+  ///bound to the container — unlike [deleteContainer], the underlying
+  ///native store stays alive and any live WebView keeps working
+  ///against an empty fresh state.
+  ///
+  ///Returns `true` if the platform reported the clear succeeded for
+  ///the subsystems it can touch (see per-platform notes below). The
+  ///set of subsystems isn't uniform — Apple's
+  ///[`removeData(ofTypes:modifiedSince:completionHandler:)`](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/1532938-removedata)
+  ///is a single primitive that scopes cookies, DOM storage,
+  ///IndexedDB, ServiceWorkers and the HTTP cache; Linux's
+  ///[`webkit_website_data_manager_clear`](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.WebsiteDataManager.clear.html)
+  ///is similarly comprehensive. Android's `androidx.webkit.Profile`
+  ///doesn't expose a single clear-all; the implementation composes
+  ///per-subsystem clears via `Profile.getCookieManager`,
+  ///`Profile.getWebStorage` and `Profile.getGeolocationPermissions`,
+  ///and the per-WebView HTTP cache + the *global* `ServiceWorker
+  ///ControllerCompat` aren't reached by this call. Apps that need
+  ///those wiped on Android should also call
+  ///[PlatformInAppWebViewController.clearCache] on every live WebView
+  ///in the container.
+  ///
+  ///Returns `false` if the container does not exist or the platform
+  ///reported an error.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName:
+            'Profile.getCookieManager / getWebStorage / getGeolocationPermissions',
+        apiUrl:
+            'https://developer.android.com/reference/androidx/webkit/Profile',
+        note:
+            "Best-effort: clears cookies, DOM storage (localStorage / IndexedDB / WebSQL / AppCache) and geolocation permissions. The per-WebView HTTP cache and the global ServiceWorkerControllerCompat are NOT cleared by this call. Honored only when WebViewFeature.MULTI_PROFILE is supported (System WebView 110+).",
+      ),
+      IOSPlatform(
+        apiName:
+            'WKWebsiteDataStore.removeData(ofTypes:modifiedSince:completionHandler:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/1532938-removedata',
+        available: '17.0',
+        note:
+            "Scoped to `WKWebsiteDataStore.allWebsiteDataTypes()` since the distant past — cookies, DOM storage, IndexedDB, ServiceWorkers, HTTP cache, fetch cache and more. Works while a WKWebView is still bound to the data store, which is the use-case `deleteContainer` cannot serve.",
+      ),
+      MacOSPlatform(
+        apiName:
+            'WKWebsiteDataStore.removeData(ofTypes:modifiedSince:completionHandler:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore/1532938-removedata',
+        available: '14.0',
+        note:
+            "Scoped to `WKWebsiteDataStore.allWebsiteDataTypes()` since the distant past. Works while a WKWebView is still bound.",
+      ),
+      LinuxPlatform(
+        apiName: 'webkit_website_data_manager_clear',
+        apiUrl:
+            'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.WebsiteDataManager.clear.html',
+        note:
+            "Scoped to `WEBKIT_WEBSITE_DATA_ALL` with timespan 0 (since epoch). Works while a WebView is still bound to the container's `WebKitNetworkSession`. Returns false if the container's session has not been materialized yet (no WebView has joined it this process).",
+      ),
+    ],
+  )
+  Future<bool> clearContainerData(String containerId) {
+    throw UnimplementedError(
+      'clearContainerData is not implemented on the current platform',
+    );
+  }
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   bool isClassSupported({TargetPlatform? platform}) =>
       params.isClassSupported(platform: platform);

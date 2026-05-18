@@ -1,6 +1,6 @@
 ## 6.2.0-beta.3
 
-- Added `ContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`) for enumerating and deleting named persistent storage containers
+- Added `ContainerController` (`getAllContainerNames`, `hasContainer`, `deleteContainer`, `clearContainerData`) for enumerating, clearing and deleting named persistent storage containers. `clearContainerData` empties a container's cookies, DOM storage, IndexedDB, ServiceWorkers and HTTP cache without removing the container itself — works while WebViews are still bound, which `deleteContainer` cannot
 - Added `containerId` property to `InAppWebViewSettings` for joining a named storage container at WebView construction (Android `androidx.webkit.Profile`, iOS 17+ / macOS 14+ `WKWebsiteDataStore(forIdentifier:)`, Linux `WebKitNetworkSession`)
 - Added `proxySettings` property to `InAppWebViewSettings` for per-WebView proxy (iOS 17+ / macOS 14+ `WKWebsiteDataStore.proxyConfigurations`)
 - Added Linux support

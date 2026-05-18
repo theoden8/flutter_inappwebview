@@ -79,4 +79,12 @@ class LinuxContainerController extends PlatformContainerController {
     });
     return ok ?? false;
   }
+
+  @override
+  Future<bool> clearContainerData(String containerId) async {
+    final ok = await _channel.invokeMethod<bool>('clearContainerData', {
+      'containerId': containerId,
+    });
+    return ok ?? false;
+  }
 }

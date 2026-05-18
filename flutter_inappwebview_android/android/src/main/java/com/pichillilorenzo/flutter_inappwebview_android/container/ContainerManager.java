@@ -90,6 +90,39 @@ public class ContainerManager extends ChannelDelegateImpl {
         }
         break;
       }
+      case "clearContainerData": {
+        // Best-effort clear. androidx.webkit.Profile doesn't expose a
+        // single "clear everything" primitive the way WKWebsiteDataStore
+        // and webkit_website_data_manager_clear do; we compose the
+        // three per-profile clears it does expose: CookieManager,
+        // WebStorage and GeolocationPermissions. The per-WebView HTTP
+        // cache (cleared via WebView.clearCache) and the *global*
+        // ServiceWorkerControllerCompat are out of scope by design —
+        // see the docstring on PlatformContainerController.clearContainerData.
+        String containerId = (String) call.argument("containerId");
+        if (containerId == null || containerId.isEmpty() || !isMultiProfileSupported()) {
+          result.success(false);
+          return;
+        }
+        try {
+          // getProfile returns null when the named profile hasn't been
+          // created — return false in that case rather than eagerly
+          // materializing it via getOrCreateProfile. clearContainerData
+          // on a non-existent container is a no-op.
+          Profile profile = ProfileStore.getInstance().getProfile(containerId);
+          if (profile == null) {
+            result.success(false);
+            return;
+          }
+          profile.getCookieManager().removeAllCookies(null);
+          profile.getWebStorage().deleteAllData();
+          profile.getGeolocationPermissions().clearAll();
+          result.success(true);
+        } catch (Throwable t) {
+          result.error("CONTAINER_CLEAR_FAILED", t.getMessage(), null);
+        }
+        break;
+      }
       default:
         result.notImplemented();
     }

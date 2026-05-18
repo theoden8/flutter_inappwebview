@@ -79,6 +79,11 @@ public class ContainerManager: ChannelDelegate {
                 result(false); return
             }
             deleteContainer(containerId, result: result)
+        case "clearContainerData":
+            guard let containerId = args?["containerId"] as? String, !containerId.isEmpty else {
+                result(false); return
+            }
+            clearContainerData(containerId, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -119,6 +124,28 @@ public class ContainerManager: ChannelDelegate {
                 ContainerManager.saveIdMap(map)
             }
             DispatchQueue.main.async { result(deleted) }
+        }
+    }
+
+    // Clear all data inside the container without removing the data
+    // store. Works while a WKWebView is still bound, which is the
+    // case `deleteContainer` cannot serve — Apple's
+    // remove(forIdentifier:) silently no-ops if any WKWebView still
+    // references the store. removeData(ofTypes:modifiedSince:) has
+    // no such constraint.
+    //
+    // Scoped to allWebsiteDataTypes() (cookies, DOM storage,
+    // IndexedDB, ServiceWorkers, HTTP cache, fetch cache, etc.)
+    // since .distantPast so nothing slips through a timespan filter.
+    //
+    // We deliberately do NOT touch the id ↔ UUID registry here —
+    // the container itself stays alive; only its contents are gone.
+    private func clearContainerData(_ containerId: String, result: @escaping FlutterResult) {
+        let uuid = containerIdToUUID(containerId)
+        let store = WKWebsiteDataStore(forIdentifier: uuid)
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        store.removeData(ofTypes: types, modifiedSince: .distantPast) {
+            DispatchQueue.main.async { result(true) }
         }
     }
 

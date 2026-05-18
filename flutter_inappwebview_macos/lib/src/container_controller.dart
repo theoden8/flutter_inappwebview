@@ -93,6 +93,14 @@ class MacOSContainerController extends PlatformContainerController
   }
 
   @override
+  Future<bool> clearContainerData(String containerId) async {
+    final ok = await channel?.invokeMethod<bool>('clearContainerData', {
+      'containerId': containerId,
+    });
+    return ok ?? false;
+  }
+
+  @override
   void dispose() {
     // empty
   }
