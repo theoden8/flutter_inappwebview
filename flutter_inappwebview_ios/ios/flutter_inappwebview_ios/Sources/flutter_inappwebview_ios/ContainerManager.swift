@@ -46,9 +46,54 @@ public class ContainerManager: ChannelDelegate {
         registry().set(map, forKey: registryKey)
     }
 
-    // Called from InAppWebView.preWKWebViewConfiguration whenever a
-    // containerId is bound to a WKWebsiteDataStore, so getAllContainerNames
-    // can later recover the original string from Apple's UUID list.
+    // Process-wide cache of WKWebsiteDataStore wrappers keyed by their
+    // derived UUID. Mirrors the same pattern as Linux's
+    // container_session_cache: WKWebsiteDataStore(forIdentifier:) hands
+    // out a new ObjC wrapper on every call, but they all back the same
+    // on-disk store. Sharing one wrapper across every WebView that joins
+    // a container removes one source of in-use refcount confusion when
+    // remove(forIdentifier:) is called for deleteContainer — the
+    // wrapper goes through one canonical path instead of being
+    // duplicated per WebView and per controller method. Eviction is
+    // explicit on deleteContainer, just before remove(forIdentifier:),
+    // so the cache never holds a reference past the user-visible delete.
+    private static var sharedStores: [UUID: WKWebsiteDataStore] = [:]
+    private static let sharedStoresLock = NSLock()
+
+    // Return the cached WKWebsiteDataStore for `containerId`, creating
+    // it on first access and recording the id ↔ UUID mapping for
+    // getAllContainerNames. Both call sites (InAppWebView's bind in
+    // preWKWebViewConfiguration, and ContainerManager's
+    // clearContainerData) go through this — the WebView and the
+    // controller end up holding *the same* wrapper instance for a
+    // given container, which is the entire point of caching.
+    public static func getOrCreateDataStore(forContainer containerId: String) -> WKWebsiteDataStore {
+        let uuid = containerIdToUUID(containerId)
+        sharedStoresLock.lock()
+        defer { sharedStoresLock.unlock() }
+        if let cached = sharedStores[uuid] {
+            return cached
+        }
+        let store = WKWebsiteDataStore(forIdentifier: uuid)
+        sharedStores[uuid] = store
+        var map = loadIdMap()
+        map[containerId] = uuid.uuidString
+        saveIdMap(map)
+        return store
+    }
+
+    // Called from deleteContainer just before remove(forIdentifier:) so
+    // our cached wrapper isn't keeping the underlying store ref-counted
+    // alive while WebKit tries to tear it down.
+    private static func evictDataStore(forContainer containerId: String) {
+        let uuid = containerIdToUUID(containerId)
+        sharedStoresLock.lock()
+        sharedStores.removeValue(forKey: uuid)
+        sharedStoresLock.unlock()
+    }
+
+    // Kept for backwards compatibility with the bind site that doesn't
+    // need the store back. New code should prefer getOrCreateDataStore.
     public static func registerContainerBinding(_ containerId: String, uuid: UUID) {
         var map = loadIdMap()
         map[containerId] = uuid.uuidString
@@ -111,6 +156,15 @@ public class ContainerManager: ChannelDelegate {
     }
 
     private func deleteContainer(_ containerId: String, result: @escaping FlutterResult) {
+        // Drop our cached wrapper before WebKit tries to free the
+        // underlying store — every wrapper ref keeps the store alive
+        // from WebKit's perspective, and our cache is the one held by
+        // the plugin itself rather than the user's WKWebView. The
+        // WebView-side wrapper is still keeping the store in use; this
+        // doesn't fix that race (callers needing a wipe while a
+        // WebView is bound should use clearContainerData), but it
+        // removes us as a reason for the silent no-op.
+        ContainerManager.evictDataStore(forContainer: containerId)
         let uuid = containerIdToUUID(containerId)
         WKWebsiteDataStore.remove(forIdentifier: uuid) { error in
             // Apple returns an error when the store doesn't exist or
@@ -141,8 +195,13 @@ public class ContainerManager: ChannelDelegate {
     // We deliberately do NOT touch the id ↔ UUID registry here —
     // the container itself stays alive; only its contents are gone.
     private func clearContainerData(_ containerId: String, result: @escaping FlutterResult) {
-        let uuid = containerIdToUUID(containerId)
-        let store = WKWebsiteDataStore(forIdentifier: uuid)
+        // Go through the shared cache so we operate on the *same*
+        // wrapper any live WebView is holding via its
+        // configuration.websiteDataStore. WKWebsiteDataStore's
+        // removeData routes through the underlying store anyway, but
+        // sharing the wrapper keeps refcount semantics tidy and
+        // mirrors the bind site.
+        let store = ContainerManager.getOrCreateDataStore(forContainer: containerId)
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
         store.removeData(ofTypes: types, modifiedSince: .distantPast) {
             DispatchQueue.main.async { result(true) }

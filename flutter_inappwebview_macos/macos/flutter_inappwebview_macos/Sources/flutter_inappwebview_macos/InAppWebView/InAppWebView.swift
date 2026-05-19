@@ -327,14 +327,16 @@ public class InAppWebView: WKWebView, WKUIDelegate,
                 configuration.websiteDataStore = WKWebsiteDataStore.default()
             }
             // Persistent per-WebView partitioning. Mirrors the iOS path,
-            // gated on macOS 14+. incognito wins.
+            // gated on macOS 14+. incognito wins. The shared
+            // ContainerManager.getOrCreateDataStore cache makes sure
+            // sibling WebViews in the same container and any
+            // ContainerController op all hold the same wrapper
+            // instance.
             if !settings.incognito,
                let containerId = settings.containerId, !containerId.isEmpty,
                #available(macOS 14.0, *) {
-                let uuid = containerIdToUUID(containerId)
                 configuration.websiteDataStore =
-                    WKWebsiteDataStore(forIdentifier: uuid)
-                ContainerManager.registerContainerBinding(containerId, uuid: uuid)
+                    ContainerManager.getOrCreateDataStore(forContainer: containerId)
             }
             // Per-WebView proxy. Same shape and rationale as iOS — attach
             // to whichever store the WebView ended up with so a profile-

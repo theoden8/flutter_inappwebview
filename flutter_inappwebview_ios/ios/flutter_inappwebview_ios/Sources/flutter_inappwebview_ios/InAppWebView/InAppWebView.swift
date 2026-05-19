@@ -743,16 +743,17 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 if !settings.incognito,
                    let containerId = settings.containerId, !containerId.isEmpty,
                    #available(iOS 17.0, *) {
-                    let uuid = containerIdToUUID(containerId)
+                    // Get the WKWebsiteDataStore from
+                    // ContainerManager's shared cache so this WebView,
+                    // sibling WebViews in the same container, and any
+                    // ContainerController op all hold the *same*
+                    // wrapper. Mirrors the Linux
+                    // container_session_cache pattern. The helper also
+                    // records the id ↔ UUID mapping so
+                    // getAllContainerNames can later recover the
+                    // string.
                     configuration.websiteDataStore =
-                        WKWebsiteDataStore(forIdentifier: uuid)
-                    // Record the binding so PlatformContainerController
-                    // can later list the containerId by name. The map is
-                    // intersected with allDataStoreIdentifiers on read,
-                    // so ids that never get materialized (e.g. the
-                    // WebView is disposed before any data is written)
-                    // are filtered out automatically.
-                    ContainerManager.registerContainerBinding(containerId, uuid: uuid)
+                        ContainerManager.getOrCreateDataStore(forContainer: containerId)
                 }
                 // Per-WebView proxy. Apple's
                 // `WKWebsiteDataStore.proxyConfigurations` is the only API
