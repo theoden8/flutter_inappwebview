@@ -57,6 +57,7 @@
 #### macOS and iOS Platforms
 - Implemented `PlatformContainerController`, `InAppWebViewSettings.containerId` and `InAppWebViewSettings.proxySettings` on iOS 17+ / macOS 14+ via `WKWebsiteDataStore(forIdentifier:)`
 - `CookieManager` methods taking a `webViewId` use the cookie store of that WebView's container
+- `ProxyController` overrides also apply to container data stores
 - Implemented `saveState`, `restoreState` InAppWebViewController methods
 - Implemented `PlatformProxyController` class
 - Add Swift Package Manager support [#2409](https://github.com/pichillilorenzo/flutter_inappwebview/issues/2409)

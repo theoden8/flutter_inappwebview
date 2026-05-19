@@ -743,16 +743,17 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 if !settings.incognito,
                    let containerId = settings.containerId, !containerId.isEmpty,
                    #available(iOS 17.0, *) {
-                    let uuid = containerIdToUUID(containerId)
+                    // Get the WKWebsiteDataStore from
+                    // ContainerManager's shared cache so this WebView,
+                    // sibling WebViews in the same container, and any
+                    // ContainerController op all hold the *same*
+                    // wrapper. Mirrors the Linux
+                    // container_session_cache pattern. The helper also
+                    // records the id ↔ UUID mapping so
+                    // getAllContainerNames can later recover the
+                    // string.
                     configuration.websiteDataStore =
-                        WKWebsiteDataStore(forIdentifier: uuid)
-                    // Record the binding so PlatformContainerController
-                    // can later list the containerId by name. The map is
-                    // intersected with allDataStoreIdentifiers on read,
-                    // so ids that never get materialized (e.g. the
-                    // WebView is disposed before any data is written)
-                    // are filtered out automatically.
-                    ContainerManager.registerContainerBinding(containerId, uuid: uuid)
+                        ContainerManager.getOrCreateDataStore(forContainer: containerId)
                 }
                 // Per-WebView proxy. Apple's
                 // `WKWebsiteDataStore.proxyConfigurations` is the only API
@@ -766,8 +767,24 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 if let proxyMap = settings.proxySettings,
                    #available(iOS 17.0, *),
                    let proxy = ProxySettings.fromMap(map: proxyMap) {
-                    configuration.websiteDataStore.proxyConfigurations =
-                        proxy.toProxyConfigurations()
+                    // A rule set with no usable rule leaves this store as it is,
+                    // proxy and pin alike. The empty array it would otherwise
+                    // produce is not a no-op: WKWebsiteDataStore routes it to
+                    // clearProxyConfigData, which strips the proxy off the live
+                    // session. And pinning would exempt the store from the
+                    // process-wide override while applying nothing itself.
+                    if let proxyConfigurations = proxy.toProxyConfigurations() {
+                        configuration.websiteDataStore.proxyConfigurations =
+                            proxyConfigurations
+                        // Exempts this store from ProxyManager's process-wide
+                        // fan-out, which would otherwise replace the proxy the
+                        // site asked for with the global one, or clear it.
+                        ProxyManager.pinPerSiteProxy(to: configuration.websiteDataStore)
+                    } else {
+                        debugPrint("InAppWebView - proxySettings has no usable rule; leaving this store's proxy alone")
+                    }
+                } else if #available(iOS 17.0, *) {
+                    ProxyManager.releasePerSiteProxy(from: configuration.websiteDataStore)
                 }
                 if !settings.applicationNameForUserAgent.isEmpty {
                     if let applicationNameForUserAgent = configuration.applicationNameForUserAgent {
