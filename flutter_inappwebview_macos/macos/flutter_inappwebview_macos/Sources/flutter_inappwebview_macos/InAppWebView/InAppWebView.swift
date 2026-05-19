@@ -327,14 +327,16 @@ public class InAppWebView: WKWebView, WKUIDelegate,
                 configuration.websiteDataStore = WKWebsiteDataStore.default()
             }
             // Persistent per-WebView partitioning. Mirrors the iOS path,
-            // gated on macOS 14+. incognito wins.
+            // gated on macOS 14+. incognito wins. The shared
+            // ContainerManager.getOrCreateDataStore cache makes sure
+            // sibling WebViews in the same container and any
+            // ContainerController op all hold the same wrapper
+            // instance.
             if !settings.incognito,
                let containerId = settings.containerId, !containerId.isEmpty,
                #available(macOS 14.0, *) {
-                let uuid = containerIdToUUID(containerId)
                 configuration.websiteDataStore =
-                    WKWebsiteDataStore(forIdentifier: uuid)
-                ContainerManager.registerContainerBinding(containerId, uuid: uuid)
+                    ContainerManager.getOrCreateDataStore(forContainer: containerId)
             }
             // Per-WebView proxy. Same shape and rationale as iOS — attach
             // to whichever store the WebView ended up with so a profile-
@@ -342,8 +344,24 @@ public class InAppWebView: WKWebView, WKUIDelegate,
             if let proxyMap = settings.proxySettings,
                #available(macOS 14.0, *),
                let proxy = ProxySettings.fromMap(map: proxyMap) {
-                configuration.websiteDataStore.proxyConfigurations =
-                    proxy.toProxyConfigurations()
+                // A rule set with no usable rule leaves this store as it is,
+                // proxy and pin alike. The empty array it would otherwise
+                // produce is not a no-op: WKWebsiteDataStore routes it to
+                // clearProxyConfigData, which strips the proxy off the live
+                // session. And pinning would exempt the store from the
+                // process-wide override while applying nothing itself.
+                if let proxyConfigurations = proxy.toProxyConfigurations() {
+                    configuration.websiteDataStore.proxyConfigurations =
+                        proxyConfigurations
+                    // Exempts this store from ProxyManager's process-wide
+                    // fan-out, which would otherwise replace the proxy the
+                    // site asked for with the global one, or clear it.
+                    ProxyManager.pinPerSiteProxy(to: configuration.websiteDataStore)
+                } else {
+                    debugPrint("InAppWebView - proxySettings has no usable rule; leaving this store's proxy alone")
+                }
+            } else if #available(macOS 14.0, *) {
+                ProxyManager.releasePerSiteProxy(from: configuration.websiteDataStore)
             }
             if !settings.applicationNameForUserAgent.isEmpty {
                 if let applicationNameForUserAgent = configuration.applicationNameForUserAgent {

@@ -8,11 +8,13 @@ import '../env.dart';
 import '../util.dart';
 
 part 'clear_and_set_proxy_override.dart';
+part 'proxy_override_applies_to_containers.dart';
 
 void main() {
   final shouldSkip = !ProxyController.isClassSupported();
 
   skippableGroup('Proxy Controller', () {
     clearAndSetProxyOverride();
+    proxyOverrideAppliesToContainers();
   }, skip: shouldSkip);
 }
