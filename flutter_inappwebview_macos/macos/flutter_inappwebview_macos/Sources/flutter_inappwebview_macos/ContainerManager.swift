@@ -57,7 +57,40 @@ public class ContainerManager: ChannelDelegate {
     private static var sharedStores: [UUID: WKWebsiteDataStore] = [:]
     private static let sharedStoresLock = NSLock()
 
+    // WebKit-init warm-up.
+    //
+    // fetchAllDataStoreIdentifiers and WKWebsiteDataStore(forIdentifier:)
+    // post their results via WTF::RunLoop::main(). That singleton only
+    // exists once WebKit has been initialized on the main thread —
+    // RunLoop::initializeMain() runs as a side effect of the first real
+    // WebKit use. If our identifier APIs are the very first WebKit touch
+    // in the process (cold start, no WKWebView constructed yet), the
+    // background completion can dispatch into an uninitialized run loop
+    // and crash inside os_unfair_lock_lock with EXC_BAD_ACCESS at
+    // address 0x40 — the lock at offset 0x40 of a null base. Symptom is
+    // a SIGSEGV in JavaScriptCore::WTF::RunLoop::dispatch before any of
+    // our completion code runs.
+    //
+    // Touching the default data store on the main thread forces
+    // RunLoop::initializeMain(). We do it lazily, once, from every
+    // entry point the plugin exposes that could be the first WebKit
+    // touch: the platform-channel handler (covers
+    // getAllContainerNames / hasContainer / deleteContainer /
+    // clearContainerData) and the InAppWebView bind site via
+    // getOrCreateDataStore. Both run on the main thread.
+    // internal (not private) so the XCTest target in
+    // example/macos/RunnerTests can reach them via @testable import.
+    static var didWarmUpWebKit = false
+
+    static func ensureWebKitInitialized() {
+        assert(Thread.isMainThread)
+        if didWarmUpWebKit { return }
+        _ = WKWebsiteDataStore.default()
+        didWarmUpWebKit = true
+    }
+
     public static func getOrCreateDataStore(forContainer containerId: String) -> WKWebsiteDataStore {
+        ensureWebKitInitialized()
         let uuid = containerIdToUUID(containerId)
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
@@ -95,6 +128,9 @@ public class ContainerManager: ChannelDelegate {
     }
 
     public override func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // First line of every public entry: see ensureWebKitInitialized's
+        // docstring for the EXC_BAD_ACCESS at 0x40 we're avoiding here.
+        ContainerManager.ensureWebKitInitialized()
         let args = call.arguments as? [String: Any]
         switch call.method {
         case "getAllContainerNames":
