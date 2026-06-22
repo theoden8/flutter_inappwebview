@@ -158,6 +158,8 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
   @Nullable
   public Set<String> requestedWithHeaderOriginAllowList;
   @Nullable
+  public Integer attributionRegistrationBehavior = null;
+  @Nullable
   public Set<Pattern> javaScriptHandlersOriginAllowList;
   public Boolean javaScriptHandlersForMainFrameOnly = false;
   public Boolean javaScriptBridgeEnabled = true;
@@ -463,6 +465,9 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
         case "requestedWithHeaderOriginAllowList":
           requestedWithHeaderOriginAllowList = new HashSet<>((List<String>) value);
           break;
+        case "attributionRegistrationBehavior":
+          attributionRegistrationBehavior = value != null ? ((Number) value).intValue() : null;
+          break;
         case "javaScriptHandlersOriginAllowList":
           javaScriptHandlersOriginAllowList = new HashSet<>();
           for (String pattern : (List<String>) value) {
@@ -599,6 +604,7 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
     settings.put("defaultVideoPoster", defaultVideoPoster);
     settings.put("requestedWithHeaderOriginAllowList",
             requestedWithHeaderOriginAllowList != null ? new ArrayList<>(requestedWithHeaderOriginAllowList) : null);
+    settings.put("attributionRegistrationBehavior", attributionRegistrationBehavior);
     settings.put("javaScriptHandlersOriginAllowList",
             javaScriptHandlersOriginAllowList != null ? new ArrayList<String>() {{
               for (Pattern pattern : javaScriptHandlersOriginAllowList) {
@@ -712,6 +718,9 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
       }
       if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
         realSettings.put("requestedWithHeaderOriginAllowList", new ArrayList<>(WebSettingsCompat.getRequestedWithHeaderOriginAllowList(settings)));
+      }
+      if (WebViewFeature.isFeatureSupported(WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR)) {
+        realSettings.put("attributionRegistrationBehavior", WebSettingsCompat.getAttributionRegistrationBehavior(settings));
       }
     }
     return realSettings;
