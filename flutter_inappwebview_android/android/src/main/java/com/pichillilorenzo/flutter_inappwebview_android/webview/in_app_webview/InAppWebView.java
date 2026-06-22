@@ -66,6 +66,7 @@ import androidx.webkit.ProfileStore;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
+import androidx.webkit.WebViewMediaIntegrityApiStatusConfig;
 
 import com.pichillilorenzo.flutter_inappwebview_android.InAppWebViewFlutterPlugin;
 import com.pichillilorenzo.flutter_inappwebview_android.R;
@@ -521,6 +522,11 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
     if (customSettings.attributionRegistrationBehavior != null &&
             WebViewFeature.isFeatureSupported(WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR)) {
       WebSettingsCompat.setAttributionRegistrationBehavior(settings, customSettings.attributionRegistrationBehavior);
+    }
+    if (customSettings.webViewMediaIntegrityApiStatus != null &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS)) {
+      WebSettingsCompat.setWebViewMediaIntegrityApiStatus(settings,
+              new WebViewMediaIntegrityApiStatusConfig.Builder(customSettings.webViewMediaIntegrityApiStatus).build());
     }
 
     contentBlockerHandler.getRuleList().clear();
@@ -1237,6 +1243,12 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
             !Util.objEquals(customSettings.attributionRegistrationBehavior, newCustomSettings.attributionRegistrationBehavior) &&
             WebViewFeature.isFeatureSupported(WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR)) {
       WebSettingsCompat.setAttributionRegistrationBehavior(settings, newCustomSettings.attributionRegistrationBehavior);
+    }
+    if (newSettingsMap.get("webViewMediaIntegrityApiStatus") != null &&
+            !Util.objEquals(customSettings.webViewMediaIntegrityApiStatus, newCustomSettings.webViewMediaIntegrityApiStatus) &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS)) {
+      WebSettingsCompat.setWebViewMediaIntegrityApiStatus(settings,
+              new WebViewMediaIntegrityApiStatusConfig.Builder(newCustomSettings.webViewMediaIntegrityApiStatus).build());
     }
 
     if (plugin != null) {

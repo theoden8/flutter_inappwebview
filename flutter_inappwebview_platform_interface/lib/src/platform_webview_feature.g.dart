@@ -268,6 +268,12 @@ class WebViewFeature {
     'VISUAL_STATE_CALLBACK',
   );
 
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.webViewMediaIntegrityApiStatus].
+  static const WEBVIEW_MEDIA_INTEGRITY_API_STATUS = WebViewFeature._internal(
+    'WEBVIEW_MEDIA_INTEGRITY_API_STATUS',
+    'WEBVIEW_MEDIA_INTEGRITY_API_STATUS',
+  );
+
   ///Feature for [isFeatureSupported]. This feature covers [WebMessagePort.postMessage] with `ArrayBuffer` type,
   ///[InAppWebViewController.postWebMessage] with `ArrayBuffer` type, and [JavaScriptReplyProxy.postMessage] with `ArrayBuffer` type.
   static const WEB_MESSAGE_ARRAY_BUFFER = WebViewFeature._internal(
@@ -378,6 +384,7 @@ class WebViewFeature {
     WebViewFeature.START_SAFE_BROWSING,
     WebViewFeature.TRACING_CONTROLLER_BASIC_USAGE,
     WebViewFeature.VISUAL_STATE_CALLBACK,
+    WebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS,
     WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER,
     WebViewFeature.WEB_MESSAGE_CALLBACK_ON_MESSAGE,
     WebViewFeature.WEB_MESSAGE_LISTENER,
@@ -550,6 +557,8 @@ class WebViewFeature {
         return 'TRACING_CONTROLLER_BASIC_USAGE';
       case 'VISUAL_STATE_CALLBACK':
         return 'VISUAL_STATE_CALLBACK';
+      case 'WEBVIEW_MEDIA_INTEGRITY_API_STATUS':
+        return 'WEBVIEW_MEDIA_INTEGRITY_API_STATUS';
       case 'WEB_MESSAGE_ARRAY_BUFFER':
         return 'WEB_MESSAGE_ARRAY_BUFFER';
       case 'WEB_MESSAGE_CALLBACK_ON_MESSAGE':
@@ -836,6 +845,13 @@ class AndroidWebViewFeature {
     'VISUAL_STATE_CALLBACK',
   );
 
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.webViewMediaIntegrityApiStatus].
+  static const WEBVIEW_MEDIA_INTEGRITY_API_STATUS =
+      AndroidWebViewFeature._internal(
+        'WEBVIEW_MEDIA_INTEGRITY_API_STATUS',
+        'WEBVIEW_MEDIA_INTEGRITY_API_STATUS',
+      );
+
   ///
   static const WEB_MESSAGE_CALLBACK_ON_MESSAGE =
       AndroidWebViewFeature._internal(
@@ -940,6 +956,7 @@ class AndroidWebViewFeature {
     AndroidWebViewFeature.SUPPRESS_ERROR_PAGE,
     AndroidWebViewFeature.TRACING_CONTROLLER_BASIC_USAGE,
     AndroidWebViewFeature.VISUAL_STATE_CALLBACK,
+    AndroidWebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS,
     AndroidWebViewFeature.WEB_MESSAGE_CALLBACK_ON_MESSAGE,
     AndroidWebViewFeature.WEB_MESSAGE_LISTENER,
     AndroidWebViewFeature.WEB_MESSAGE_PORT_CLOSE,
@@ -1104,6 +1121,8 @@ class AndroidWebViewFeature {
         return 'TRACING_CONTROLLER_BASIC_USAGE';
       case 'VISUAL_STATE_CALLBACK':
         return 'VISUAL_STATE_CALLBACK';
+      case 'WEBVIEW_MEDIA_INTEGRITY_API_STATUS':
+        return 'WEBVIEW_MEDIA_INTEGRITY_API_STATUS';
       case 'WEB_MESSAGE_CALLBACK_ON_MESSAGE':
         return 'WEB_MESSAGE_CALLBACK_ON_MESSAGE';
       case 'WEB_MESSAGE_LISTENER':
