@@ -153,6 +153,8 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
   @Nullable
   public Integer webViewMediaIntegrityApiStatus = null;
   @Nullable
+  public Boolean backForwardCacheEnabled = null;
+  @Nullable
   public Set<Pattern> javaScriptHandlersOriginAllowList;
   public Boolean javaScriptHandlersForMainFrameOnly = false;
   public Boolean javaScriptBridgeEnabled = true;
@@ -461,6 +463,9 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
         case "webViewMediaIntegrityApiStatus":
           webViewMediaIntegrityApiStatus = value != null ? ((Number) value).intValue() : null;
           break;
+        case "backForwardCacheEnabled":
+          backForwardCacheEnabled = (Boolean) value;
+          break;
         case "javaScriptHandlersOriginAllowList":
           javaScriptHandlersOriginAllowList = new HashSet<>();
           for (String pattern : (List<String>) value) {
@@ -598,6 +603,7 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
             requestedWithHeaderOriginAllowList != null ? new ArrayList<>(requestedWithHeaderOriginAllowList) : null);
     settings.put("attributionRegistrationBehavior", attributionRegistrationBehavior);
     settings.put("webViewMediaIntegrityApiStatus", webViewMediaIntegrityApiStatus);
+    settings.put("backForwardCacheEnabled", backForwardCacheEnabled);
     settings.put("javaScriptHandlersOriginAllowList",
             javaScriptHandlersOriginAllowList != null ? new ArrayList<String>() {{
               for (Pattern pattern : javaScriptHandlersOriginAllowList) {
@@ -721,6 +727,9 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
         if (integrityConfig != null) {
           realSettings.put("webViewMediaIntegrityApiStatus", integrityConfig.getDefaultStatus());
         }
+      }
+      if (WebViewFeature.isFeatureSupported(WebViewFeature.BACK_FORWARD_CACHE)) {
+        realSettings.put("backForwardCacheEnabled", WebSettingsCompat.getBackForwardCacheEnabled(settings));
       }
     }
     return realSettings;

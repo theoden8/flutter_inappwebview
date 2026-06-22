@@ -1466,6 +1466,21 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
   )
   WebViewMediaIntegrityApiStatus_? webViewMediaIntegrityApiStatus;
 
+  ///Enables or disables the back/forward cache for this WebView. When `null`,
+  ///the WebView default applies.
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName: "WebSettingsCompat.setBackForwardCacheEnabled",
+        apiUrl:
+            "https://developer.android.com/reference/androidx/webkit/WebSettingsCompat#setBackForwardCacheEnabled(android.webkit.WebSettings,boolean)",
+        note:
+            "available on Android only if [WebViewFeature.BACK_FORWARD_CACHE] feature is supported.",
+      ),
+    ],
+  )
+  bool? backForwardCacheEnabled;
+
   ///Set to `true` to disable the bouncing of the WebView when the scrolling has reached an edge of the content. The default value is `false`.
   @SupportedPlatforms(platforms: [IOSPlatform()])
   bool? disallowOverScroll;
@@ -3407,6 +3422,7 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     this.requestedWithHeaderOriginAllowList,
     this.attributionRegistrationBehavior,
     this.webViewMediaIntegrityApiStatus,
+    this.backForwardCacheEnabled,
     this.disallowOverScroll = false,
     this.enableViewportScale = false,
     this.suppressesIncrementalRendering = false,

@@ -486,6 +486,10 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
       WebSettingsCompat.setWebViewMediaIntegrityApiStatus(settings,
               new WebViewMediaIntegrityApiStatusConfig.Builder(customSettings.webViewMediaIntegrityApiStatus).build());
     }
+    if (customSettings.backForwardCacheEnabled != null &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.BACK_FORWARD_CACHE)) {
+      WebSettingsCompat.setBackForwardCacheEnabled(settings, customSettings.backForwardCacheEnabled);
+    }
 
     contentBlockerHandler.getRuleList().clear();
     for (Map<String, Map<String, Object>> contentBlocker : customSettings.contentBlockers) {
@@ -1207,6 +1211,11 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
             WebViewFeature.isFeatureSupported(WebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS)) {
       WebSettingsCompat.setWebViewMediaIntegrityApiStatus(settings,
               new WebViewMediaIntegrityApiStatusConfig.Builder(newCustomSettings.webViewMediaIntegrityApiStatus).build());
+    }
+    if (newSettingsMap.get("backForwardCacheEnabled") != null &&
+            !Util.objEquals(customSettings.backForwardCacheEnabled, newCustomSettings.backForwardCacheEnabled) &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.BACK_FORWARD_CACHE)) {
+      WebSettingsCompat.setBackForwardCacheEnabled(settings, newCustomSettings.backForwardCacheEnabled);
     }
 
     if (plugin != null) {

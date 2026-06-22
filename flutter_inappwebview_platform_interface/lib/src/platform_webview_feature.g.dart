@@ -29,6 +29,12 @@ class WebViewFeature {
     'ATTRIBUTION_REGISTRATION_BEHAVIOR',
   );
 
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.backForwardCacheEnabled].
+  static const BACK_FORWARD_CACHE = WebViewFeature._internal(
+    'BACK_FORWARD_CACHE',
+    'BACK_FORWARD_CACHE',
+  );
+
   ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewController.createWebMessageChannel].
   static const CREATE_WEB_MESSAGE_CHANNEL = WebViewFeature._internal(
     'CREATE_WEB_MESSAGE_CHANNEL',
@@ -345,6 +351,7 @@ class WebViewFeature {
   static final Set<WebViewFeature> values = [
     WebViewFeature.ALGORITHMIC_DARKENING,
     WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR,
+    WebViewFeature.BACK_FORWARD_CACHE,
     WebViewFeature.CREATE_WEB_MESSAGE_CHANNEL,
     WebViewFeature.DISABLED_ACTION_MODE_MENU_ITEMS,
     WebViewFeature.DOCUMENT_START_SCRIPT,
@@ -479,6 +486,8 @@ class WebViewFeature {
         return 'ALGORITHMIC_DARKENING';
       case 'ATTRIBUTION_REGISTRATION_BEHAVIOR':
         return 'ATTRIBUTION_REGISTRATION_BEHAVIOR';
+      case 'BACK_FORWARD_CACHE':
+        return 'BACK_FORWARD_CACHE';
       case 'CREATE_WEB_MESSAGE_CHANNEL':
         return 'CREATE_WEB_MESSAGE_CHANNEL';
       case 'DISABLED_ACTION_MODE_MENU_ITEMS':
@@ -627,6 +636,12 @@ class AndroidWebViewFeature {
         'ATTRIBUTION_REGISTRATION_BEHAVIOR',
         'ATTRIBUTION_REGISTRATION_BEHAVIOR',
       );
+
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.backForwardCacheEnabled].
+  static const BACK_FORWARD_CACHE = AndroidWebViewFeature._internal(
+    'BACK_FORWARD_CACHE',
+    'BACK_FORWARD_CACHE',
+  );
 
   ///
   static const CREATE_WEB_MESSAGE_CHANNEL = AndroidWebViewFeature._internal(
@@ -921,6 +936,7 @@ class AndroidWebViewFeature {
   static final Set<AndroidWebViewFeature> values = [
     AndroidWebViewFeature.ALGORITHMIC_DARKENING,
     AndroidWebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR,
+    AndroidWebViewFeature.BACK_FORWARD_CACHE,
     AndroidWebViewFeature.CREATE_WEB_MESSAGE_CHANNEL,
     AndroidWebViewFeature.DISABLED_ACTION_MODE_MENU_ITEMS,
     AndroidWebViewFeature.DOCUMENT_START_SCRIPT,
@@ -1051,6 +1067,8 @@ class AndroidWebViewFeature {
         return 'ALGORITHMIC_DARKENING';
       case 'ATTRIBUTION_REGISTRATION_BEHAVIOR':
         return 'ATTRIBUTION_REGISTRATION_BEHAVIOR';
+      case 'BACK_FORWARD_CACHE':
+        return 'BACK_FORWARD_CACHE';
       case 'CREATE_WEB_MESSAGE_CHANNEL':
         return 'CREATE_WEB_MESSAGE_CHANNEL';
       case 'DISABLED_ACTION_MODE_MENU_ITEMS':
