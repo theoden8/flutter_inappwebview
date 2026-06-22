@@ -518,6 +518,10 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
             WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
       WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, customSettings.requestedWithHeaderOriginAllowList);
     }
+    if (customSettings.attributionRegistrationBehavior != null &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR)) {
+      WebSettingsCompat.setAttributionRegistrationBehavior(settings, customSettings.attributionRegistrationBehavior);
+    }
 
     contentBlockerHandler.getRuleList().clear();
     for (Map<String, Map<String, Object>> contentBlocker : customSettings.contentBlockers) {
@@ -1228,6 +1232,11 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
             !Util.objEquals(customSettings.requestedWithHeaderOriginAllowList, newCustomSettings.requestedWithHeaderOriginAllowList) &&
             WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
       WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, newCustomSettings.requestedWithHeaderOriginAllowList);
+    }
+    if (newSettingsMap.get("attributionRegistrationBehavior") != null &&
+            !Util.objEquals(customSettings.attributionRegistrationBehavior, newCustomSettings.attributionRegistrationBehavior) &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR)) {
+      WebSettingsCompat.setAttributionRegistrationBehavior(settings, newCustomSettings.attributionRegistrationBehavior);
     }
 
     if (plugin != null) {
