@@ -399,6 +399,10 @@ class WebViewFeature_ {
   static const REQUESTED_WITH_HEADER_ALLOW_LIST =
       const WebViewFeature_._internal("REQUESTED_WITH_HEADER_ALLOW_LIST");
 
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.attributionRegistrationBehavior].
+  static const ATTRIBUTION_REGISTRATION_BEHAVIOR =
+      const WebViewFeature_._internal("ATTRIBUTION_REGISTRATION_BEHAVIOR");
+
   ///Feature for [isFeatureSupported]. This feature covers [WebMessagePort.postMessage] with `ArrayBuffer` type,
   ///[InAppWebViewController.postWebMessage] with `ArrayBuffer` type, and [JavaScriptReplyProxy.postMessage] with `ArrayBuffer` type.
   static const WEB_MESSAGE_ARRAY_BUFFER = const WebViewFeature_._internal(
@@ -656,6 +660,10 @@ class AndroidWebViewFeature_ {
   static const ALGORITHMIC_DARKENING = const AndroidWebViewFeature_._internal(
     "ALGORITHMIC_DARKENING",
   );
+
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.attributionRegistrationBehavior].
+  static const ATTRIBUTION_REGISTRATION_BEHAVIOR =
+      const AndroidWebViewFeature_._internal("ATTRIBUTION_REGISTRATION_BEHAVIOR");
 
   ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.requestedWithHeaderMode].
   static const REQUESTED_WITH_HEADER_CONTROL =

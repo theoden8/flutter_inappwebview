@@ -4,6 +4,7 @@ import 'package:flutter_inappwebview_internal_annotations/flutter_inappwebview_i
 import 'package:flutter_inappwebview_platform_interface/flutter_inappwebview_platform_interface.dart';
 
 import '../types/action_mode_menu_item.dart';
+import '../types/attribution_behavior.dart';
 import '../types/cache_mode.dart';
 import '../types/data_detector_types.dart';
 import '../types/font_hinting_style.dart';
@@ -1432,6 +1433,22 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     ],
   )
   Set<String>? requestedWithHeaderOriginAllowList;
+
+  ///Controls how the WebView handles the registration of Attribution Reporting
+  ///API sources and triggers. When `null`, the WebView default applies
+  ///([AttributionBehavior.APP_SOURCE_AND_WEB_TRIGGER]).
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName: "WebSettingsCompat.setAttributionRegistrationBehavior",
+        apiUrl:
+            "https://developer.android.com/reference/androidx/webkit/WebSettingsCompat#setAttributionRegistrationBehavior(android.webkit.WebSettings,int)",
+        note:
+            "available on Android only if [WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR] feature is supported.",
+      ),
+    ],
+  )
+  AttributionBehavior_? attributionRegistrationBehavior;
 
   ///Set to `true` to disable the bouncing of the WebView when the scrolling has reached an edge of the content. The default value is `false`.
   @SupportedPlatforms(platforms: [IOSPlatform()])
@@ -3372,6 +3389,7 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     this.enterpriseAuthenticationAppLinkPolicyEnabled = true,
     this.defaultVideoPoster,
     this.requestedWithHeaderOriginAllowList,
+    this.attributionRegistrationBehavior,
     this.disallowOverScroll = false,
     this.enableViewportScale = false,
     this.suppressesIncrementalRendering = false,
