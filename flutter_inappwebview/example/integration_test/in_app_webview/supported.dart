@@ -91,6 +91,12 @@ void supported() {
       );
       expect(
         InAppWebViewSettings.isPropertySupported(
+          InAppWebViewSettingsProperty.webViewMediaIntegrityApiStatus,
+        ),
+        defaultTargetPlatform == TargetPlatform.android,
+      );
+      expect(
+        InAppWebViewSettings.isPropertySupported(
           InAppWebViewSettingsProperty.allowsBackForwardNavigationGestures,
         ),
         [
