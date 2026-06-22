@@ -5,6 +5,7 @@ import 'package:flutter_inappwebview_platform_interface/flutter_inappwebview_pla
 
 import '../types/action_mode_menu_item.dart';
 import '../types/attribution_behavior.dart';
+import '../types/webview_media_integrity_api_status.dart';
 import '../types/cache_mode.dart';
 import '../types/data_detector_types.dart';
 import '../types/font_hinting_style.dart';
@@ -1449,6 +1450,21 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     ],
   )
   AttributionBehavior_? attributionRegistrationBehavior;
+
+  ///Controls the default status of the WebView Media Integrity API. When
+  ///`null`, the WebView default applies ([WebViewMediaIntegrityApiStatus.ENABLED]).
+  @SupportedPlatforms(
+    platforms: [
+      AndroidPlatform(
+        apiName: "WebSettingsCompat.setWebViewMediaIntegrityApiStatus",
+        apiUrl:
+            "https://developer.android.com/reference/androidx/webkit/WebSettingsCompat#setWebViewMediaIntegrityApiStatus(android.webkit.WebSettings,androidx.webkit.WebViewMediaIntegrityApiStatusConfig)",
+        note:
+            "available on Android only if [WebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS] feature is supported.",
+      ),
+    ],
+  )
+  WebViewMediaIntegrityApiStatus_? webViewMediaIntegrityApiStatus;
 
   ///Set to `true` to disable the bouncing of the WebView when the scrolling has reached an edge of the content. The default value is `false`.
   @SupportedPlatforms(platforms: [IOSPlatform()])
@@ -3390,6 +3406,7 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     this.defaultVideoPoster,
     this.requestedWithHeaderOriginAllowList,
     this.attributionRegistrationBehavior,
+    this.webViewMediaIntegrityApiStatus,
     this.disallowOverScroll = false,
     this.enableViewportScale = false,
     this.suppressesIncrementalRendering = false,

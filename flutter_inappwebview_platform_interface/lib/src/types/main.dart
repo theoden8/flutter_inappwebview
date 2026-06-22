@@ -203,6 +203,8 @@ export 'web_resource_request.dart' show WebResourceRequest;
 export 'web_resource_response.dart' show WebResourceResponse;
 export 'web_storage_origin.dart' show WebStorageOrigin, AndroidWebStorageOrigin;
 export 'web_storage_type.dart' show WebStorageType;
+export 'webview_media_integrity_api_status.dart'
+    show WebViewMediaIntegrityApiStatus;
 export 'website_data_record.dart'
     show WebsiteDataRecord, IOSWKWebsiteDataRecord;
 export 'website_data_type.dart' show WebsiteDataType, IOSWKWebsiteDataType;

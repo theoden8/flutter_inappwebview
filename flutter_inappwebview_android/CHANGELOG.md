@@ -2,6 +2,7 @@
 
 - Updated flutter_inappwebview_platform_interface version to ^1.4.0-beta.3
 - Implemented `InAppWebViewSettings.attributionRegistrationBehavior` via `WebSettingsCompat.setAttributionRegistrationBehavior`, gated on `WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR`
+- Implemented `InAppWebViewSettings.webViewMediaIntegrityApiStatus` via `WebSettingsCompat.setWebViewMediaIntegrityApiStatus`, gated on `WebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS`
 - Updated native dependencies:
   - implementation from `'androidx.webkit:webkit:1.12.0'` to `'androidx.webkit:webkit:1.14.0'`
   - implementation from `'androidx.browser:browser:1.8.0'` to `'androidx.browser:browser:1.9.0'`

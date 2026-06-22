@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewFeature;
+import androidx.webkit.WebViewMediaIntegrityApiStatusConfig;
 
 import com.pichillilorenzo.flutter_inappwebview_android.ISettings;
 import com.pichillilorenzo.flutter_inappwebview_android.types.PreferredContentModeOptionType;
@@ -149,6 +150,8 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
   public Set<String> requestedWithHeaderOriginAllowList;
   @Nullable
   public Integer attributionRegistrationBehavior = null;
+  @Nullable
+  public Integer webViewMediaIntegrityApiStatus = null;
   @Nullable
   public Set<Pattern> javaScriptHandlersOriginAllowList;
   public Boolean javaScriptHandlersForMainFrameOnly = false;
@@ -455,6 +458,9 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
         case "attributionRegistrationBehavior":
           attributionRegistrationBehavior = value != null ? ((Number) value).intValue() : null;
           break;
+        case "webViewMediaIntegrityApiStatus":
+          webViewMediaIntegrityApiStatus = value != null ? ((Number) value).intValue() : null;
+          break;
         case "javaScriptHandlersOriginAllowList":
           javaScriptHandlersOriginAllowList = new HashSet<>();
           for (String pattern : (List<String>) value) {
@@ -591,6 +597,7 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
     settings.put("requestedWithHeaderOriginAllowList",
             requestedWithHeaderOriginAllowList != null ? new ArrayList<>(requestedWithHeaderOriginAllowList) : null);
     settings.put("attributionRegistrationBehavior", attributionRegistrationBehavior);
+    settings.put("webViewMediaIntegrityApiStatus", webViewMediaIntegrityApiStatus);
     settings.put("javaScriptHandlersOriginAllowList",
             javaScriptHandlersOriginAllowList != null ? new ArrayList<String>() {{
               for (Pattern pattern : javaScriptHandlersOriginAllowList) {
@@ -707,6 +714,13 @@ public class InAppWebViewSettings implements ISettings<InAppWebViewInterface> {
       }
       if (WebViewFeature.isFeatureSupported(WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR)) {
         realSettings.put("attributionRegistrationBehavior", WebSettingsCompat.getAttributionRegistrationBehavior(settings));
+      }
+      if (WebViewFeature.isFeatureSupported(WebViewFeature.WEBVIEW_MEDIA_INTEGRITY_API_STATUS)) {
+        WebViewMediaIntegrityApiStatusConfig integrityConfig =
+                WebSettingsCompat.getWebViewMediaIntegrityApiStatus(settings);
+        if (integrityConfig != null) {
+          realSettings.put("webViewMediaIntegrityApiStatus", integrityConfig.getDefaultStatus());
+        }
       }
     }
     return realSettings;
