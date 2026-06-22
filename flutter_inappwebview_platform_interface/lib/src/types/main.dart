@@ -7,6 +7,7 @@ export 'ajax_request_event_type.dart' show AjaxRequestEventType;
 export 'ajax_request_headers.dart' show AjaxRequestHeaders;
 export 'ajax_request_ready_state.dart' show AjaxRequestReadyState;
 export 'attributed_string.dart' show AttributedString, IOSNSAttributedString;
+export 'attribution_behavior.dart' show AttributionBehavior;
 export 'attributed_string_text_effect_style.dart'
     show AttributedStringTextEffectStyle, IOSNSAttributedStringTextEffectStyle;
 export 'cache_mode.dart' show CacheMode, AndroidCacheMode;
