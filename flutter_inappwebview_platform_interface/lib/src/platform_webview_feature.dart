@@ -403,6 +403,10 @@ class WebViewFeature_ {
   static const ATTRIBUTION_REGISTRATION_BEHAVIOR =
       const WebViewFeature_._internal("ATTRIBUTION_REGISTRATION_BEHAVIOR");
 
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.webViewMediaIntegrityApiStatus].
+  static const WEBVIEW_MEDIA_INTEGRITY_API_STATUS =
+      const WebViewFeature_._internal("WEBVIEW_MEDIA_INTEGRITY_API_STATUS");
+
   ///Feature for [isFeatureSupported]. This feature covers [WebMessagePort.postMessage] with `ArrayBuffer` type,
   ///[InAppWebViewController.postWebMessage] with `ArrayBuffer` type, and [JavaScriptReplyProxy.postMessage] with `ArrayBuffer` type.
   static const WEB_MESSAGE_ARRAY_BUFFER = const WebViewFeature_._internal(
@@ -664,6 +668,10 @@ class AndroidWebViewFeature_ {
   ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.attributionRegistrationBehavior].
   static const ATTRIBUTION_REGISTRATION_BEHAVIOR =
       const AndroidWebViewFeature_._internal("ATTRIBUTION_REGISTRATION_BEHAVIOR");
+
+  ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.webViewMediaIntegrityApiStatus].
+  static const WEBVIEW_MEDIA_INTEGRITY_API_STATUS =
+      const AndroidWebViewFeature_._internal("WEBVIEW_MEDIA_INTEGRITY_API_STATUS");
 
   ///Feature for [isFeatureSupported]. This feature covers [InAppWebViewSettings.requestedWithHeaderMode].
   static const REQUESTED_WITH_HEADER_CONTROL =
