@@ -6,6 +6,7 @@
 - `CookieManager.flush` now fans out across every container's `CookieManager` (via `ProfileStore`) in addition to the default jar, so an on-pause flush makes container session cookies durable too — previously a swipe-kill shortly after login could lose a container's session because only the default profile was flushed. Also fixed `flush` never resolving its Dart future on the success path
 - Fixed container-scoped cookie ops poisoning the global `CookieManager` memo: the `webViewId`-scoped `getCookies` / `deleteCookie` assigned the container's `CookieManager` into the class's static field, whose null-only memo check then served that container's jar to every unscoped op (`setCookie`, `deleteCookies`, `deleteAllCookies`, `removeSessionCookies`, `flush`, `getAllCookies`) until process death — `deleteAllCookies` could silently wipe a live container's cookies instead of the default jar, surfacing a launch later as sporadic logouts. Scoped lookups now stay in method locals and the field carries the invariant in its docs
 - Updated flutter_inappwebview_platform_interface version to ^1.4.0-beta.3
+- Implemented `InAppWebViewSettings.attributionRegistrationBehavior` via `WebSettingsCompat.setAttributionRegistrationBehavior`, gated on `WebViewFeature.ATTRIBUTION_REGISTRATION_BEHAVIOR`
 - Updated native dependencies:
   - implementation from `'androidx.webkit:webkit:1.12.0'` to `'androidx.webkit:webkit:1.14.0'`
   - implementation from `'androidx.browser:browser:1.8.0'` to `'androidx.browser:browser:1.9.0'`

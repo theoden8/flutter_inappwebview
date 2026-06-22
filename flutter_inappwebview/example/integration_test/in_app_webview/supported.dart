@@ -85,6 +85,12 @@ void supported() {
       );
       expect(
         InAppWebViewSettings.isPropertySupported(
+          InAppWebViewSettingsProperty.attributionRegistrationBehavior,
+        ),
+        defaultTargetPlatform == TargetPlatform.android,
+      );
+      expect(
+        InAppWebViewSettings.isPropertySupported(
           InAppWebViewSettingsProperty.allowsBackForwardNavigationGestures,
         ),
         [
