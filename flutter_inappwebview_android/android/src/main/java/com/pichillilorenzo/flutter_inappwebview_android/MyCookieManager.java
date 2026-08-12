@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.webkit.CookieManagerCompat;
 import androidx.webkit.Profile;
+import androidx.webkit.ProfileStore;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
@@ -488,9 +489,52 @@ public class MyCookieManager extends ChannelDelegateImpl {
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
       cookieManager.flush();
+      flushContainerCookieManagers();
     } else if (plugin != null) {
       CookieSyncManager cookieSyncMngr = CookieSyncManager.createInstance(plugin.applicationContext);
       cookieSyncMngr.sync();
+    }
+    // Resolve the channel result on the happy path too — without this
+    // the Dart-side `await CookieManager.flush()` never completes,
+    // which turns an on-pause "make cookies durable" hook into a hang.
+    result.success(true);
+  }
+
+  // Chromium commits cookies to disk lazily; flush() forces the write.
+  // But CookieManager.getInstance() — what getCookieManager() returns —
+  // is the *default* profile's manager. Cookies living in a container's
+  // jar (androidx.webkit.Profile, joined via
+  // InAppWebViewSettings.containerId) are not touched by it. An app
+  // calling flush() as a "make everything durable before the OS kills
+  // us" lifecycle hook would silently leave every container's session
+  // cookies unwritten; a swipe-kill shortly after login then loses the
+  // session, surfacing downstream as "cookies don't persist across
+  // restart" even with incognito off. So flush fans out: default jar
+  // first (above), then every profile the ProfileStore knows about.
+  // Per-profile failures are logged and skipped — one broken profile
+  // must not stop the rest from reaching disk.
+  private void flushContainerCookieManagers() {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+      return;
+    }
+    try {
+      ProfileStore store = ProfileStore.getInstance();
+      for (String name : store.getAllProfileNames()) {
+        if (Profile.DEFAULT_PROFILE_NAME.equals(name)) {
+          // Already flushed via the global CookieManager above.
+          continue;
+        }
+        try {
+          Profile profile = store.getProfile(name);
+          if (profile != null) {
+            profile.getCookieManager().flush();
+          }
+        } catch (Throwable t) {
+          Log.w(LOG_TAG, "flush for container '" + name + "' failed: " + t);
+        }
+      }
+    } catch (Throwable t) {
+      Log.w(LOG_TAG, "container flush fan-out failed: " + t);
     }
   }
 
