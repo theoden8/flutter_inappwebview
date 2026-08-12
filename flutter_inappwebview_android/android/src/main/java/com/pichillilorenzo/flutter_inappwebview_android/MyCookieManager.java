@@ -34,6 +34,16 @@ import io.flutter.plugin.common.MethodChannel;
 public class MyCookieManager extends ChannelDelegateImpl {
   protected static final String LOG_TAG = "MyCookieManager";
   public static final String METHOD_CHANNEL_NAME = "com.pichillilorenzo/flutter_inappwebview_cookiemanager";
+  // INVARIANT: this memo holds the DEFAULT profile's CookieManager and
+  // nothing else — see getCookieManager(), whose null-only check makes
+  // whatever lands here sticky until process death. Container-scoped
+  // lookups (cookieManagerForContainerOf) must stay in method locals:
+  // one write of a profile's manager into this field silently
+  // redirects every unscoped op in this class (setCookie,
+  // deleteCookies, deleteAllCookies, removeSessionCookies, flush,
+  // getAllCookies) to that container's jar — deleteAllCookies then
+  // wipes a live container instead of the default jar, which
+  // surfaces a launch later as sporadic logouts.
   @Nullable
   public static CookieManager cookieManager;
   @Nullable
@@ -165,6 +175,9 @@ public class MyCookieManager extends ChannelDelegateImpl {
   // Behavior is byte-identical to the stock global path when the fallback
   // triggers, so unscoped callers (cookie inspector during legacy flows,
   // settings-import paths) keep working unchanged.
+  //
+  // Callers: keep the returned manager in a LOCAL. Never assign it to
+  // the `cookieManager` static — see the invariant on that field.
   static private @Nullable CookieManager cookieManagerForContainerOf(@Nullable Object webViewId) {
     if (webViewId == null
         || !WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
@@ -257,14 +270,17 @@ public class MyCookieManager extends ChannelDelegateImpl {
 
     final List<Map<String, Object>> cookieListMap = new ArrayList<>();
 
-    cookieManager = cookieManagerForContainerOf(webViewId);
-    if (cookieManager == null) return cookieListMap;
+    // LOCAL on purpose — see the invariant on the `cookieManager`
+    // static. Assigning a container's manager into the static poisons
+    // the memo for every unscoped method in this class.
+    CookieManager manager = cookieManagerForContainerOf(webViewId);
+    if (manager == null) return cookieListMap;
 
     List<String> cookies = new ArrayList<>();
     if (WebViewFeature.isFeatureSupported(WebViewFeature.GET_COOKIE_INFO)) {
-      cookies = CookieManagerCompat.getCookieInfo(cookieManager, url);
+      cookies = CookieManagerCompat.getCookieInfo(manager, url);
     } else {
-      String cookiesString = cookieManager.getCookie(url);
+      String cookiesString = manager.getCookie(url);
       if (cookiesString != null) {
         cookies = Arrays.asList(cookiesString.split(";"));
       }
@@ -344,8 +360,11 @@ public class MyCookieManager extends ChannelDelegateImpl {
   // identical to the stock global-jar path when it doesn't.
   public void deleteCookie(String url, String name, String domain, String path,
                            @Nullable Object webViewId, final MethodChannel.Result result) {
-    cookieManager = cookieManagerForContainerOf(webViewId);
-    if (cookieManager == null) {
+    // LOCAL on purpose — see the invariant on the `cookieManager`
+    // static. Assigning a container's manager into the static poisons
+    // the memo for every unscoped method in this class.
+    final CookieManager manager = cookieManagerForContainerOf(webViewId);
+    if (manager == null) {
       result.success(false);
       return;
     }
@@ -358,23 +377,23 @@ public class MyCookieManager extends ChannelDelegateImpl {
     cookieValue += ";";
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-      cookieManager.setCookie(url, cookieValue, new ValueCallback<Boolean>() {
+      manager.setCookie(url, cookieValue, new ValueCallback<Boolean>() {
         @Override
         public void onReceiveValue(Boolean successful) {
           result.success(successful);
         }
       });
-      cookieManager.flush();
+      manager.flush();
     }
     else if (plugin != null) {
       CookieSyncManager cookieSyncMngr = CookieSyncManager.createInstance(plugin.applicationContext);
       cookieSyncMngr.startSync();
-      cookieManager.setCookie(url, cookieValue);
+      manager.setCookie(url, cookieValue);
       cookieSyncMngr.stopSync();
       cookieSyncMngr.sync();
       result.success(true);
     } else {
-      cookieManager.setCookie(url, cookieValue);
+      manager.setCookie(url, cookieValue);
       result.success(true);
     }
   }
