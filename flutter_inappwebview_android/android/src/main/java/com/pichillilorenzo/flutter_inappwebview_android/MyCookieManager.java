@@ -513,6 +513,10 @@ public class MyCookieManager extends ChannelDelegateImpl {
       CookieSyncManager cookieSyncMngr = CookieSyncManager.createInstance(plugin.applicationContext);
       cookieSyncMngr.sync();
     }
+    // Resolve the channel result on the happy path too — without this
+    // the Dart-side `await CookieManager.flush()` never completes,
+    // which turns an on-pause "make cookies durable" hook into a hang.
+    result.success(true);
   }
 
   // Chromium commits cookies to disk lazily; flush() forces the write.
