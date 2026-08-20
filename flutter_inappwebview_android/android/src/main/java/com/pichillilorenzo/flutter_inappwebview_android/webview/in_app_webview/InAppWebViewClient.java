@@ -29,6 +29,7 @@ import androidx.annotation.RequiresApi;
 import androidx.webkit.WebResourceRequestCompat;
 import androidx.webkit.WebViewFeature;
 
+import com.pichillilorenzo.flutter_inappwebview_android.content_blocker.ContentBlockerHandler;
 import com.pichillilorenzo.flutter_inappwebview_android.Util;
 import com.pichillilorenzo.flutter_inappwebview_android.credential_database.CredentialDatabase;
 import com.pichillilorenzo.flutter_inappwebview_android.in_app_browser.InAppBrowserDelegate;
@@ -716,7 +717,18 @@ public class InAppWebViewClient extends WebViewClient {
     }
 
     WebResourceResponse response = null;
-    if (!webView.contentBlockerHandler.getRuleList().isEmpty()) {
+    // [WebSpace fork patch] Invoke a custom ContentBlockerHandler regardless of
+    // its rule list. A subclass does its own matching inside checkUrl and may
+    // legitimately hold zero ContentBlocker rules (WebSpace's interceptor
+    // matches against a DNS host set and adblock-rust, not rule objects).
+    // Gating on the list disabled such a handler outright: setSettings()
+    // clears getRuleList() and repopulates it from customSettings, whose
+    // contentBlockers defaults to an empty list, so any placeholder rule the
+    // subclass seeded was wiped by the first settings update after attach and
+    // checkUrl was never called again. The stock empty-list fast path is
+    // unchanged for the base handler.
+    if (!webView.contentBlockerHandler.getRuleList().isEmpty()
+            || webView.contentBlockerHandler.getClass() != ContentBlockerHandler.class) {
       try {
         response = webView.contentBlockerHandler.checkUrl(webView, request);
       } catch (Exception e) {
