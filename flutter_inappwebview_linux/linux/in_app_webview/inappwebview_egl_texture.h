@@ -79,6 +79,19 @@ void inappwebview_egl_texture_set_egl_image(InAppWebViewEGLTexture* self,
                                             uint32_t width,
                                             uint32_t height);
 
+/**
+ * Points an existing texture at another webview, or at none.
+ *
+ * populate() runs on Flutter's raster thread, so the webview it reads is
+ * swapped under the texture's own mutex, and the previous webview's frame
+ * (its DMA-BUF, EGL image or texture content) is dropped with it. Pass
+ * nullptr before releasing a webview: the texture then serves its default
+ * frame instead of reaching into a destroyed WPE view.
+ */
+void inappwebview_egl_texture_set_webview(
+    InAppWebViewEGLTexture* texture,
+    flutter_inappwebview_plugin::WebViewType* webview);
+
 G_END_DECLS
 
 #endif  // FLUTTER_INAPPWEBVIEW_PLUGIN_INAPPWEBVIEW_EGL_TEXTURE_H_
