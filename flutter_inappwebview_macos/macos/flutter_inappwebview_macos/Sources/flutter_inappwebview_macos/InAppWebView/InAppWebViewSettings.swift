@@ -88,6 +88,17 @@ public class InAppWebViewSettings: ISettings<InAppWebView> {
             alpha = alphaValue
             settings.removeValue(forKey: "alpha")
         }
+        // `proxySettings` is typed `[String: Any?]?`, which Objective-C
+        // cannot represent, so @objcMembers never exposes it: super.parse
+        // asks `responds(to:)` first and skips the key without a word. The
+        // WebView then came up with no proxy bound at all while the Dart
+        // side believed it had sent one -- a site pinned to Tor or to a
+        // manual proxy loaded over the device IP. Same reason the nullable
+        // primitives above are handled here rather than by the superclass.
+        if let proxySettingsMap = settings["proxySettings"] as? [String: Any?] {
+            proxySettings = proxySettingsMap
+            settings.removeValue(forKey: "proxySettings")
+        }
         let _ = super.parse(settings: settings)
         return self
     }
