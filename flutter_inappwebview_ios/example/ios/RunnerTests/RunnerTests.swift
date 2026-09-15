@@ -101,4 +101,47 @@ class RunnerTests: XCTestCase {
                    "different containerIds must not share a wrapper")
   }
 
+  // `proxySettings` is typed [String: Any?]?, which Objective-C cannot
+  // represent, so @objcMembers emits no selector for it and
+  // ISettings.parse's responds(to:) path skipped the key without a word.
+  // The explicit branch in InAppWebViewSettings.parse is the only thing
+  // binding it, and preWKWebViewConfiguration assigns
+  // websiteDataStore.proxyConfigurations only for a non-nil value — so
+  // before that branch a WebView pinned to a proxy quietly loaded over the
+  // device IP while the Dart side believed it had sent one. The value goes
+  // in as an NSDictionary because that is what FlutterStandardMessageCodec
+  // decodes a Dart map into: the branch's `as? [String: Any?]` has to
+  // survive that bridge, not just a native Swift literal.
+  @available(iOS 17.0, *)
+  func testParseBindsProxySettings() {
+    let proxyMap: NSDictionary = [
+      "proxyRules": [["url": "socks5://127.0.0.1:9050"]]
+    ]
+
+    let parsed = InAppWebViewSettings().parse(settings: [
+      "containerId": "runner-test-proxy",
+      "proxySettings": proxyMap,
+    ])
+
+    XCTAssertNotNil(parsed.proxySettings,
+                    "parse must bind proxySettings; preWKWebViewConfiguration skips a nil one")
+    XCTAssertEqual(ProxySettings.fromMap(map: parsed.proxySettings)?.proxyRules.first?.url,
+                   "socks5://127.0.0.1:9050",
+                   "the bound map must still convert into ProxySettings")
+
+    // containerId is a plain String?, which KVC does carry. It rides along
+    // to show the failure was specific to the non-representable type
+    // rather than to settings parsing at large.
+    XCTAssertEqual(parsed.containerId, "runner-test-proxy")
+  }
+
+  // Companion to the above. If this ever starts responding, the property
+  // became Objective-C representable and super.parse can carry it on its
+  // own — at which point the explicit branch is redundant rather than
+  // load-bearing, and this test is the place that says so.
+  func testProxySettingsIsNotKeyValueCodable() {
+    XCTAssertFalse(InAppWebViewSettings().responds(to: Selector("proxySettings")),
+                   "no selector expected; if one appears the property type changed")
+  }
+
 }
