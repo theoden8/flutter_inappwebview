@@ -71,6 +71,19 @@ class ProxyManager : public ChannelDelegate {
   PluginInstance* plugin_ = nullptr;
 };
 
+/**
+ * Applies the active process-wide proxy override, if any, to a single
+ * network session.
+ *
+ * setProxyOverride can only reach the sessions that exist when it runs, but
+ * a container session is created lazily, the first time a WebView joins
+ * that container. A session created afterwards starts in
+ * WEBKIT_NETWORK_PROXY_MODE_DEFAULT (system proxy), so without this hook the
+ * contained WebView would silently bypass the proxy the caller asked the
+ * platform to apply process-wide. Called by get_or_create_container_session.
+ */
+void apply_active_proxy_override(WebKitNetworkSession* session);
+
 }  // namespace flutter_inappwebview_plugin
 
 #endif  // FLUTTER_INAPPWEBVIEW_PLUGIN_PROXY_MANAGER_H_

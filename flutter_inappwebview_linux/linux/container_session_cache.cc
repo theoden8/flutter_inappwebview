@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <system_error>
 
+#include "proxy_manager.h"
+
 namespace flutter_inappwebview_plugin {
 
 std::unordered_map<std::string, WebKitNetworkSession*>&
@@ -45,6 +47,14 @@ WebKitNetworkSession* get_or_create_container_session(const std::string& id) {
   WebKitNetworkSession* session =
       webkit_network_session_new(data_dir.c_str(), cache_dir.c_str());
   if (session == nullptr) return nullptr;
+
+  // A fresh session starts in WEBKIT_NETWORK_PROXY_MODE_DEFAULT (system
+  // proxy), and ProxyManager only reaches the sessions cached when
+  // setProxyOverride ran. Since this session is created lazily — the first
+  // time a WebView joins this container, typically well after the app set its
+  // process-wide proxy at startup — it has to pick the override up here, or
+  // the contained site goes out over the device IP.
+  apply_active_proxy_override(session);
 
   // The cache holds the canonical reference. Each call site that uses
   // the returned session takes its own ref via g_object_new's
