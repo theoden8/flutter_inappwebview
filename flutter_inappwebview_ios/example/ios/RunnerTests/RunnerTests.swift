@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import Network
 import WebKit
 import XCTest
 
@@ -142,6 +143,119 @@ class RunnerTests: XCTestCase {
   func testProxySettingsIsNotKeyValueCodable() {
     XCTAssertFalse(InAppWebViewSettings().responds(to: Selector("proxySettings")),
                    "no selector expected; if one appears the property type changed")
+  }
+
+  // ProxyController.setProxyOverride reaches WKWebsiteDataStore.default(),
+  // .nonPersistent() and the container stores cached at the time of the call.
+  // A container store is created lazily, the first time a WebView joins that
+  // container, so an override set beforehand -- the usual ordering, proxy at
+  // startup and WebViews after -- has to be replayed onto it here. Without
+  // that, a contained WebView loads over the device IP while an override is
+  // in force.
+  @available(iOS 17.0, *)
+  func testContainerStoreCreatedLaterInheritsProxyOverride() {
+    ProxyManager.activeProxyConfigurations = [
+      ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: 8083))
+    ]
+    defer { ProxyManager.activeProxyConfigurations = nil }
+
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-replay")
+    XCTAssertEqual(store.proxyConfigurations.count, 1,
+                   "a container store created while an override is active must carry it")
+  }
+
+  @available(iOS 17.0, *)
+  func testContainerStoreCarriesNoProxyWhenNoOverrideIsActive() {
+    ProxyManager.activeProxyConfigurations = nil
+
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-none")
+    XCTAssertTrue(store.proxyConfigurations.isEmpty,
+                  "with no override active the store is left alone")
+  }
+
+  // The process-wide override is the fallback for sites that named no
+  // proxy of their own, so it must not reach a store a WebView pinned:
+  // overwriting it swaps that site's proxy for the global one, and
+  // clearing it drops the site to the device IP. Assigning an empty array
+  // is the only call in this stack that reaches WebKit's
+  // clearProxyConfigData, and clearProxyOverride used to make it over
+  // every container store at once.
+  @available(iOS 17.0, *)
+  func testPinnedStoreIsNotClobberedByTheOverrideFanOut() {
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-pinned")
+    // Two, so the count distinguishes this from the single-entry override.
+    store.proxyConfigurations = [
+      ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: 9050)),
+      ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: 9051)),
+    ]
+    ProxyManager.pinPerSiteProxy(to: store)
+    defer { ProxyManager.releasePerSiteProxy(from: store) }
+
+    ProxyManager.fanOutToFollowingStores([
+      ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: 8083))
+    ])
+    XCTAssertEqual(store.proxyConfigurations.count, 2,
+                   "setting the override must not overwrite a pinned site's proxy")
+
+    ProxyManager.fanOutToFollowingStores([])
+    XCTAssertEqual(store.proxyConfigurations.count, 2,
+                   "clearing the override must not drop a pinned site to the device IP")
+  }
+
+  // The control: a container store nobody pinned still follows the
+  // override, which is what the fan-out exists for.
+  @available(iOS 17.0, *)
+  func testUnpinnedContainerStoreStillFollowsTheOverride() {
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-unpinned")
+
+    ProxyManager.fanOutToFollowingStores([
+      ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: 8083))
+    ])
+    XCTAssertEqual(store.proxyConfigurations.count, 1,
+                   "a store with no proxy of its own must take the override")
+
+    ProxyManager.fanOutToFollowingStores([])
+    XCTAssertTrue(store.proxyConfigurations.isEmpty,
+                  "and must give it up when the override is cleared")
+  }
+
+  // A WebView that binds the store and names no proxy hands it back to
+  // the override, so a site whose proxy was removed stops using the old one.
+  @available(iOS 17.0, *)
+  func testReleaseHandsTheStoreBackToTheOverride() {
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-released")
+    store.proxyConfigurations = [
+      ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: 9050))
+    ]
+    ProxyManager.pinPerSiteProxy(to: store)
+
+    ProxyManager.activeProxyConfigurations = nil
+    ProxyManager.releasePerSiteProxy(from: store)
+    XCTAssertTrue(store.proxyConfigurations.isEmpty,
+                  "with no override active the released store carries nothing")
+    XCTAssertFalse(ProxyManager.carriesPerSiteProxy(store),
+                   "and it follows the fan-out again")
+  }
+
+  // toProxyConfigurations refuses a rule set that does not fully convert,
+  // rather than handing back the rules that did. The empty array it used to
+  // produce is not a no-op: WKWebsiteDataStore routes an empty array to
+  // clearProxyConfigData, so one unusable rule would strip the proxy off a
+  // live session instead of being refused.
+  @available(iOS 17.0, *)
+  func testPartiallyConvertibleRuleSetIsRefused() {
+    let usable: [String: Any?] = [
+      "proxyRules": [["url": "socks5://127.0.0.1:9050"]] as [[String: Any?]]
+    ]
+    XCTAssertEqual(ProxySettings.fromMap(map: usable)?.toProxyConfigurations()?.count, 1)
+
+    // An empty url becomes "http://", which has no host, so that rule cannot
+    // become a ProxyConfiguration.
+    let partly: [String: Any?] = [
+      "proxyRules": [["url": "socks5://127.0.0.1:9050"], ["url": ""]] as [[String: Any?]]
+    ]
+    XCTAssertNil(ProxySettings.fromMap(map: partly)?.toProxyConfigurations(),
+                 "one unusable rule must refuse the whole set, not clear the proxy")
   }
 
 }

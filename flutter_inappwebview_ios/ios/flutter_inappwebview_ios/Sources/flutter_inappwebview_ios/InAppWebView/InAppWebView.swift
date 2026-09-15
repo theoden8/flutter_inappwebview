@@ -767,8 +767,23 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 if let proxyMap = settings.proxySettings,
                    #available(iOS 17.0, *),
                    let proxy = ProxySettings.fromMap(map: proxyMap) {
-                    configuration.websiteDataStore.proxyConfigurations =
-                        proxy.toProxyConfigurations()
+                    // An unusable rule leaves this store's proxy as it is. The empty
+                    // array it would otherwise produce is not a no-op:
+                    // WKWebsiteDataStore routes it to clearProxyConfigData, which
+                    // strips the proxy off the live session.
+                    if let proxyConfigurations = proxy.toProxyConfigurations() {
+                        configuration.websiteDataStore.proxyConfigurations =
+                            proxyConfigurations
+                    } else {
+                        debugPrint("InAppWebView - unusable proxy rule; leaving this store's proxy alone")
+                    }
+                    // Exempts this store from ProxyManager's process-wide
+                    // fan-out, which would otherwise overwrite the proxy the
+                    // site asked for with the global one -- or, on a clear,
+                    // drop the site to the device IP.
+                    ProxyManager.pinPerSiteProxy(to: configuration.websiteDataStore)
+                } else if #available(iOS 17.0, *) {
+                    ProxyManager.releasePerSiteProxy(from: configuration.websiteDataStore)
                 }
                 if !settings.applicationNameForUserAgent.isEmpty {
                     if let applicationNameForUserAgent = configuration.applicationNameForUserAgent {

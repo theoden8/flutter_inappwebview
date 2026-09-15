@@ -40,15 +40,94 @@ public class ProxyManager: ChannelDelegate {
         }
     }
     
-    public func setProxyOverride(_ settings: ProxySettings) {
-        let proxyConfigurations = settings.toProxyConfigurations()
-        WKWebsiteDataStore.default().proxyConfigurations = proxyConfigurations
-        WKWebsiteDataStore.nonPersistent().proxyConfigurations = proxyConfigurations
+    // The configurations the Dart side last asked for, or nil when no
+    // override is active. A container's WKWebsiteDataStore is created
+    // lazily -- the first time a WebView joins that container, which can be
+    // long after setProxyOverride ran -- and a fresh store carries no proxy,
+    // so the intent has to outlive the list of stores it was applied to.
+    static var activeProxyConfigurations: [ProxyConfiguration]? = nil
+
+    // Stores a WebView pinned with a proxy of its own. The process-wide
+    // override is the fallback for sites that named no proxy, so it must
+    // not reach these: writing it over one swaps the site's proxy for the
+    // global one, and clearing it drops the site to the device IP.
+    // Assigning an empty array is the only call in this stack that reaches
+    // WebKit's clearProxyConfigData, which is the one thing that takes a
+    // proxy off a live session.
+    //
+    // Weak: a non-persistent store is transient, and a set of raw
+    // identifiers would pin a freed address that a later store can reuse.
+    private static let perSiteProxyStores = NSHashTable<WKWebsiteDataStore>.weakObjects()
+    private static let perSiteProxyLock = NSLock()
+
+    // Called by InAppWebView once it has assigned a per-WebView proxy.
+    static func pinPerSiteProxy(to store: WKWebsiteDataStore) {
+        perSiteProxyLock.lock()
+        defer { perSiteProxyLock.unlock() }
+        perSiteProxyStores.add(store)
     }
-    
+
+    // Called by InAppWebView when a WebView binds a store and names no
+    // proxy: the store goes back to following the process-wide override,
+    // which is what that site's effective proxy resolves to.
+    static func releasePerSiteProxy(from store: WKWebsiteDataStore) {
+        perSiteProxyLock.lock()
+        let wasPinned = perSiteProxyStores.contains(store)
+        perSiteProxyStores.remove(store)
+        perSiteProxyLock.unlock()
+        guard wasPinned else { return }
+        store.proxyConfigurations = activeProxyConfigurations ?? []
+    }
+
+    static func carriesPerSiteProxy(_ store: WKWebsiteDataStore) -> Bool {
+        perSiteProxyLock.lock()
+        defer { perSiteProxyLock.unlock() }
+        return perSiteProxyStores.contains(store)
+    }
+
+    // Replays the active override, if any, onto a store created after the
+    // fan-out below ran. Called by ContainerManager.getOrCreateDataStore.
+    static func applyActiveProxyOverride(to store: WKWebsiteDataStore) {
+        guard let proxyConfigurations = activeProxyConfigurations else {
+            return
+        }
+        if carriesPerSiteProxy(store) {
+            return
+        }
+        store.proxyConfigurations = proxyConfigurations
+    }
+
+    public func setProxyOverride(_ settings: ProxySettings) {
+        guard let proxyConfigurations = settings.toProxyConfigurations() else {
+            debugPrint("ProxyManager - refusing a proxy override with an unusable rule; leaving the current proxy alone")
+            return
+        }
+        // Remembered before anything is applied: a container joined later
+        // replays it rather than coming up with no proxy at all.
+        ProxyManager.activeProxyConfigurations = proxyConfigurations
+        ProxyManager.fanOutToFollowingStores(proxyConfigurations)
+    }
+
     public func clearProxyOverride() {
-        WKWebsiteDataStore.default().proxyConfigurations = []
-        WKWebsiteDataStore.nonPersistent().proxyConfigurations = []
+        ProxyManager.activeProxyConfigurations = nil
+        ProxyManager.fanOutToFollowingStores([])
+    }
+
+    // Every store that follows the process-wide override, which is all of
+    // them but the ones a WebView pinned. A container store is neither the
+    // default nor the non-persistent one, so without this fan-out a
+    // contained WebView keeps loading over the device IP while an override
+    // is in force.
+    static func fanOutToFollowingStores(_ proxyConfigurations: [ProxyConfiguration]) {
+        let defaultStore = WKWebsiteDataStore.default()
+        if !carriesPerSiteProxy(defaultStore) {
+            defaultStore.proxyConfigurations = proxyConfigurations
+        }
+        WKWebsiteDataStore.nonPersistent().proxyConfigurations = proxyConfigurations
+        for store in ContainerManager.allCachedDataStores()
+        where !carriesPerSiteProxy(store) {
+            store.proxyConfigurations = proxyConfigurations
+        }
     }
 
     public override func dispose() {
@@ -81,12 +160,20 @@ public class ProxySettings {
         )
     }
     
-    public func toProxyConfigurations() -> [ProxyConfiguration] {
+    // nil when any rule failed to convert, rather than the rules that did.
+    // A partial list applies a proxy the caller did not ask for, and an empty
+    // one is worse than a no-op: WKWebsiteDataStore routes an empty array to
+    // clearProxyConfigData, so one unparseable rule would turn "use this
+    // proxy" into "stop using any proxy" on a live session. An empty
+    // proxyRules still yields an empty array, which is the caller genuinely
+    // asking for no proxy.
+    public func toProxyConfigurations() -> [ProxyConfiguration]? {
         var proxyConfigurations: [ProxyConfiguration] = []
         for rule in proxyRules {
-            if let proxyConfiguration = rule.toProxyConfiguration() {
-                proxyConfigurations.append(proxyConfiguration)
+            guard let proxyConfiguration = rule.toProxyConfiguration() else {
+                return nil
             }
+            proxyConfigurations.append(proxyConfiguration)
         }
         return proxyConfigurations
     }
