@@ -2,6 +2,8 @@
 
 #include <cctype>
 #include <cstring>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "container_session_cache.h"
@@ -34,6 +36,91 @@ std::vector<WebKitNetworkSession*> sessions_to_apply_proxy_to() {
     }
   }
   return sessions;
+}
+
+// The override the Dart side last asked for, or nullopt when none is active
+// (never set, or cleared). Sessions outlive no one: container sessions are
+// created lazily, long after setProxyOverride may have run, so the intent has
+// to be remembered rather than only applied to the session list of the moment.
+std::optional<ProxySettings>& active_proxy_override() {
+  static std::optional<ProxySettings> override;
+  return override;
+}
+
+// Translates `settings` into a WebKitNetworkProxySettings, or nullptr when
+// WebKit refuses to allocate one. The caller owns the result and frees it with
+// webkit_network_proxy_settings_free.
+WebKitNetworkProxySettings* build_proxy_settings(const ProxySettings& settings) {
+  // Build the ignore_hosts array from bypassRules
+  std::vector<const char*> ignoreHostsCStrings;
+  for (const auto& rule : settings.bypassRules) {
+    ignoreHostsCStrings.push_back(rule.c_str());
+  }
+  ignoreHostsCStrings.push_back(nullptr);  // NULL-terminate the array
+
+  // Get the default proxy URI (first proxy rule with no schemeFilter, or schemeFilter == "*")
+  std::string defaultProxyUri;
+  for (const auto& rule : settings.proxyRules) {
+    if (!rule.schemeFilter.has_value() || rule.schemeFilter.value().empty()) {
+      defaultProxyUri = rule.url;
+      break;
+    }
+
+    std::string scheme = rule.schemeFilter.value();
+    for (char& c : scheme) {
+      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (scheme == "*") {
+      defaultProxyUri = rule.url;
+      break;
+    }
+  }
+
+  // Collect supported scheme-specific proxy rules so we can decide whether we
+  // need to force a direct default proxy to activate custom mode.
+  std::vector<std::pair<std::string, std::string>> schemeSpecificProxyRules;
+  schemeSpecificProxyRules.reserve(settings.proxyRules.size());
+  for (const auto& rule : settings.proxyRules) {
+    if (!rule.schemeFilter.has_value() || rule.schemeFilter.value().empty()) {
+      continue;
+    }
+
+    std::string scheme = rule.schemeFilter.value();
+    for (char& c : scheme) {
+      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    // Treat "*" as default proxy (already handled above).
+    if (scheme == "*") {
+      continue;
+    }
+
+    // Accept common scheme filters.
+    if (scheme != "http" && scheme != "https" && scheme != "socks" && scheme != "socks4" &&
+        scheme != "socks5") {
+      continue;
+    }
+
+    schemeSpecificProxyRules.emplace_back(std::move(scheme), rule.url);
+  }
+
+  // Create the proxy settings
+  WebKitNetworkProxySettings* proxySettings = webkit_network_proxy_settings_new(
+      defaultProxyUri.empty() ? nullptr : defaultProxyUri.c_str(),
+      settings.bypassRules.empty() ? nullptr : ignoreHostsCStrings.data());
+
+  if (proxySettings == nullptr) {
+    errorLog("ProxyManager: Failed to create WebKitNetworkProxySettings");
+    return nullptr;
+  }
+
+  // Add scheme-specific proxies
+  for (const auto& entry : schemeSpecificProxyRules) {
+    webkit_network_proxy_settings_add_proxy_for_scheme(
+        proxySettings, entry.first.c_str(), entry.second.c_str());
+  }
+
+  return proxySettings;
 }
 }  // namespace
 
@@ -117,85 +204,29 @@ void ProxyManager::HandleMethodCall(FlMethodCall* method_call) {
 }
 
 void ProxyManager::setProxyOverride(const ProxySettings& settings) {
+  // If no proxy rules, clear the proxy (which also drops the remembered
+  // override, so later sessions aren't born onto a stale one).
+  if (settings.proxyRules.empty()) {
+    clearProxyOverride();
+    return;
+  }
+
+  // Remember the override before touching any session: it is a process-wide
+  // intent, not a property of the sessions that happen to exist right now.
+  // get_or_create_container_session replays it onto each container session it
+  // creates later, so a WebView joining a container after this call doesn't
+  // come up on the system proxy and leak the device IP.
+  active_proxy_override() = settings;
+
   std::vector<WebKitNetworkSession*> sessions = sessions_to_apply_proxy_to();
   if (sessions.empty()) {
     errorLog("ProxyManager: No network sessions available");
     return;
   }
 
-  // If no proxy rules, clear the proxy
-  if (settings.proxyRules.empty()) {
-    clearProxyOverride();
-    return;
-  }
-
-  // Build the ignore_hosts array from bypassRules
-  std::vector<const char*> ignoreHostsCStrings;
-  for (const auto& rule : settings.bypassRules) {
-    ignoreHostsCStrings.push_back(rule.c_str());
-  }
-  ignoreHostsCStrings.push_back(nullptr);  // NULL-terminate the array
-
-  // Get the default proxy URI (first proxy rule with no schemeFilter, or schemeFilter == "*")
-  std::string defaultProxyUri;
-  for (const auto& rule : settings.proxyRules) {
-    if (!rule.schemeFilter.has_value() || rule.schemeFilter.value().empty()) {
-      defaultProxyUri = rule.url;
-      break;
-    }
-
-    std::string scheme = rule.schemeFilter.value();
-    for (char& c : scheme) {
-      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    if (scheme == "*") {
-      defaultProxyUri = rule.url;
-      break;
-    }
-  }
-
-  // Collect supported scheme-specific proxy rules so we can decide whether we
-  // need to force a direct default proxy to activate custom mode.
-  std::vector<std::pair<std::string, std::string>> schemeSpecificProxyRules;
-  schemeSpecificProxyRules.reserve(settings.proxyRules.size());
-  for (const auto& rule : settings.proxyRules) {
-    if (!rule.schemeFilter.has_value() || rule.schemeFilter.value().empty()) {
-      continue;
-    }
-
-    std::string scheme = rule.schemeFilter.value();
-    for (char& c : scheme) {
-      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-
-    // Treat "*" as default proxy (already handled above).
-    if (scheme == "*") {
-      continue;
-    }
-
-    // Accept common scheme filters.
-    if (scheme != "http" && scheme != "https" && scheme != "socks" && scheme != "socks4" &&
-        scheme != "socks5") {
-      continue;
-    }
-
-    schemeSpecificProxyRules.emplace_back(std::move(scheme), rule.url);
-  }
-
-  // Create the proxy settings
-  WebKitNetworkProxySettings* proxySettings = webkit_network_proxy_settings_new(
-      defaultProxyUri.empty() ? nullptr : defaultProxyUri.c_str(),
-      settings.bypassRules.empty() ? nullptr : ignoreHostsCStrings.data());
-
+  WebKitNetworkProxySettings* proxySettings = build_proxy_settings(settings);
   if (proxySettings == nullptr) {
-    errorLog("ProxyManager: Failed to create WebKitNetworkProxySettings");
     return;
-  }
-
-  // Add scheme-specific proxies
-  for (const auto& entry : schemeSpecificProxyRules) {
-    webkit_network_proxy_settings_add_proxy_for_scheme(
-        proxySettings, entry.first.c_str(), entry.second.c_str());
   }
 
   // Apply the proxy settings to every session (default + each cached
@@ -210,6 +241,10 @@ void ProxyManager::setProxyOverride(const ProxySettings& settings) {
 }
 
 void ProxyManager::clearProxyOverride() {
+  // Forget the override first: a session created after this point must come up
+  // on the system proxy, not on the one we just revoked.
+  active_proxy_override().reset();
+
   std::vector<WebKitNetworkSession*> sessions = sessions_to_apply_proxy_to();
   if (sessions.empty()) {
     errorLog("ProxyManager: No network sessions available");
@@ -221,6 +256,26 @@ void ProxyManager::clearProxyOverride() {
     webkit_network_session_set_proxy_settings(
         s, WEBKIT_NETWORK_PROXY_MODE_DEFAULT, nullptr);
   }
+}
+
+void apply_active_proxy_override(WebKitNetworkSession* session) {
+  if (session == nullptr) {
+    return;
+  }
+
+  const std::optional<ProxySettings>& active = active_proxy_override();
+  if (!active.has_value()) {
+    return;
+  }
+
+  WebKitNetworkProxySettings* proxySettings = build_proxy_settings(active.value());
+  if (proxySettings == nullptr) {
+    return;
+  }
+
+  webkit_network_session_set_proxy_settings(
+      session, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxySettings);
+  webkit_network_proxy_settings_free(proxySettings);
 }
 
 }  // namespace flutter_inappwebview_plugin

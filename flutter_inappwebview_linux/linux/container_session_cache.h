@@ -42,6 +42,11 @@ std::filesystem::path container_cache_root();
 // Returns the cached session for `id`, creating it (and the data /
 // cache directories) on first call. Returns nullptr if the runtime
 // libwebkit doesn't expose webkit_network_session_new.
+//
+// A newly created session inherits the active process-wide proxy
+// override (apply_active_proxy_override): ProxyManager's fan-out can
+// only reach the sessions that exist at the time of the call, and this
+// one may well be created after it.
 WebKitNetworkSession* get_or_create_container_session(const std::string& id);
 
 }  // namespace flutter_inappwebview_plugin
