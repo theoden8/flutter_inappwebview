@@ -40,15 +40,44 @@ public class ProxyManager: ChannelDelegate {
         }
     }
     
+    // The configurations the Dart side last asked for, or nil when no
+    // override is active. A container's WKWebsiteDataStore is created
+    // lazily -- the first time a WebView joins that container, which can be
+    // long after setProxyOverride ran -- and a fresh store carries no proxy,
+    // so the intent has to outlive the list of stores it was applied to.
+    static var activeProxyConfigurations: [ProxyConfiguration]? = nil
+
+    // Replays the active override, if any, onto a store created after the
+    // fan-out below ran. Called by ContainerManager.getOrCreateDataStore.
+    static func applyActiveProxyOverride(to store: WKWebsiteDataStore) {
+        guard let proxyConfigurations = activeProxyConfigurations else {
+            return
+        }
+        store.proxyConfigurations = proxyConfigurations
+    }
+
     public func setProxyOverride(_ settings: ProxySettings) {
         let proxyConfigurations = settings.toProxyConfigurations()
+        // Remembered before anything is applied: a container joined later
+        // replays it rather than coming up with no proxy at all.
+        ProxyManager.activeProxyConfigurations = proxyConfigurations
         WKWebsiteDataStore.default().proxyConfigurations = proxyConfigurations
         WKWebsiteDataStore.nonPersistent().proxyConfigurations = proxyConfigurations
+        // A container store is neither the default nor the non-persistent
+        // one. Without this fan-out a contained WebView keeps loading over
+        // the device IP while a process-wide override is in force.
+        for store in ContainerManager.allCachedDataStores() {
+            store.proxyConfigurations = proxyConfigurations
+        }
     }
     
     public func clearProxyOverride() {
+        ProxyManager.activeProxyConfigurations = nil
         WKWebsiteDataStore.default().proxyConfigurations = []
         WKWebsiteDataStore.nonPersistent().proxyConfigurations = []
+        for store in ContainerManager.allCachedDataStores() {
+            store.proxyConfigurations = []
+        }
     }
 
     public override func dispose() {

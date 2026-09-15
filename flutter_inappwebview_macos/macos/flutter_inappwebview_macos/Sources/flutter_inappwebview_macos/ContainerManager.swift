@@ -98,11 +98,26 @@ public class ContainerManager: ChannelDelegate {
             return cached
         }
         let store = WKWebsiteDataStore(forIdentifier: uuid)
+        // A store created after ProxyManager fanned an override out would
+        // otherwise carry no proxy: that fan-out only reaches the stores
+        // cached when it runs, and this one is created lazily on first join.
+        // Per-WebView `proxySettings` still wins -- preWKWebViewConfiguration
+        // assigns it to this same store after we return.
+        ProxyManager.applyActiveProxyOverride(to: store)
         sharedStores[uuid] = store
         var map = loadIdMap()
         map[containerId] = uuid.uuidString
         saveIdMap(map)
         return store
+    }
+
+    // Every container store currently cached, for ProxyManager's fan-out:
+    // setProxyOverride has to reach containers already joined, and
+    // applyActiveProxyOverride covers the ones joined afterwards.
+    static func allCachedDataStores() -> [WKWebsiteDataStore] {
+        sharedStoresLock.lock()
+        defer { sharedStoresLock.unlock() }
+        return Array(sharedStores.values)
     }
 
     private static func evictDataStore(forContainer containerId: String) {

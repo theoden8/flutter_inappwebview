@@ -1,5 +1,6 @@
 import FlutterMacOS
 import Cocoa
+import Network
 import WebKit
 import XCTest
 
@@ -145,6 +146,34 @@ class RunnerTests: XCTestCase {
   func testProxySettingsIsNotKeyValueCodable() {
     XCTAssertFalse(InAppWebViewSettings().responds(to: Selector("proxySettings")),
                    "no selector expected; if one appears the property type changed")
+  }
+
+  // ProxyController.setProxyOverride reaches WKWebsiteDataStore.default(),
+  // .nonPersistent() and the container stores cached at the time of the call.
+  // A container store is created lazily, the first time a WebView joins that
+  // container, so an override set beforehand -- the usual ordering, proxy at
+  // startup and WebViews after -- has to be replayed onto it here. Without
+  // that, a contained WebView loads over the device IP while an override is
+  // in force.
+  @available(macOS 14.0, *)
+  func testContainerStoreCreatedLaterInheritsProxyOverride() {
+    ProxyManager.activeProxyConfigurations = [
+      ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: 8083))
+    ]
+    defer { ProxyManager.activeProxyConfigurations = nil }
+
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-replay")
+    XCTAssertEqual(store.proxyConfigurations.count, 1,
+                   "a container store created while an override is active must carry it")
+  }
+
+  @available(macOS 14.0, *)
+  func testContainerStoreCarriesNoProxyWhenNoOverrideIsActive() {
+    ProxyManager.activeProxyConfigurations = nil
+
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-none")
+    XCTAssertTrue(store.proxyConfigurations.isEmpty,
+                  "with no override active the store is left alone")
   }
 
 }
