@@ -64,3 +64,79 @@ void perWebViewProxy() {
     );
   }, skip: shouldSkip);
 }
+
+void perWebViewProxyIsolation() {
+  final shouldSkip =
+      !InAppWebViewSettings.isPropertySupported(
+        InAppWebViewSettingsProperty.proxySettings,
+      ) ||
+      !InAppWebViewSettings.isPropertySupported(
+        InAppWebViewSettingsProperty.containerId,
+      );
+
+  // The reproduction for "only the first WebView in the process is proxied".
+  //
+  // `proxyConfigurations` is a property of the *data store*, so a per-WebView
+  // proxy is only per-WebView when each WebView owns its store — hence a
+  // containerId per side. Two proxies on different ports, each answering with
+  // its own id, make the binding observable per WebView: A must report A and B
+  // must report B. If the second store's proxy is dropped, B's load never
+  // reaches a proxy at all and the marker is missing, so a broken load cannot
+  // masquerade as a bound proxy.
+  skippableTestWidgets('each container WebView binds its own proxy', (
+    WidgetTester tester,
+  ) async {
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+
+    Future<String?> launch(String containerId, int proxyPort) async {
+      final controllerCompleter = Completer<InAppWebViewController>();
+      final pageLoaded = Completer<void>();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: InAppWebView(
+            key: GlobalKey(),
+            initialUrlRequest: URLRequest(url: TEST_URL_HTTP_EXAMPLE),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              containerId: containerId,
+              proxySettings: ProxySettings(
+                proxyRules: [
+                  ProxyRule(
+                    url: "${environment["NODE_SERVER_IP"]}:$proxyPort",
+                  ),
+                ],
+              ),
+            ),
+            onWebViewCreated: controllerCompleter.complete,
+            onLoadStop: (_, _) => pageLoaded.complete(),
+          ),
+        ),
+      );
+      final controller = await controllerCompleter.future;
+      await tester.pump();
+      await pageLoaded.future;
+      return await controller.evaluateJavascript(
+        source: "document.getElementById('proxy')?.innerHTML;",
+      );
+    }
+
+    final first = await launch('proxy-iso-a-$stamp', 8083);
+    expect(
+      first,
+      'A',
+      reason: 'the first container WebView must load through proxy A',
+    );
+
+    // The one that regresses: a second store, created after the first store's
+    // proxy is already bound in the network process.
+    final second = await launch('proxy-iso-b-$stamp', 8084);
+    expect(
+      second,
+      'B',
+      reason:
+          'the second container WebView must load through its own proxy B, '
+          'not through A and not unproxied',
+    );
+  }, skip: shouldSkip);
+}
