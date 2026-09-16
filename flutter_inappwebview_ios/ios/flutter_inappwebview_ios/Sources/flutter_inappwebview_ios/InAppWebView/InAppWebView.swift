@@ -769,6 +769,10 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 // profile genuinely uses its own proxy. On <iOS 17 this is a
                 // no-op and the WebView falls back to the system / global
                 // ProxyController override.
+                print("[container-store] webview proxySettings="
+                    + "\(settings.proxySettings != nil) containerId="
+                    + "\(settings.containerId ?? "<none>") store="
+                    + "\(ObjectIdentifier(configuration.websiteDataStore))")
                 if let proxyMap = settings.proxySettings,
                    #available(iOS 17.0, *),
                    let proxy = ProxySettings.fromMap(map: proxyMap) {

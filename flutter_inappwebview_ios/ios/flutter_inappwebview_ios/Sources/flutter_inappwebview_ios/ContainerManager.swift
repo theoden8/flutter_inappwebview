@@ -119,6 +119,8 @@ public class ContainerManager: ChannelDelegate {
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
         if let cached = sharedStores[uuid], appliedProxies[uuid] == signature {
+            print("[container-store] reused \(containerId) "
+                + "proxyRules=\(proxy?.proxyRules.count ?? 0)")
             return cached
         }
         // Built again rather than re-configured: the cached store may already
@@ -134,6 +136,12 @@ public class ContainerManager: ChannelDelegate {
         }
         sharedStores[uuid] = store
         appliedProxies[uuid] = signature
+        // Printed, not logged: the only tier that exercises this is a
+        // `flutter test` run whose stdout is the record, and a per-site proxy
+        // that fails to bind is otherwise indistinguishable from one that
+        // binds and is ignored.
+        print("[container-store] built \(containerId) "
+            + "proxyRules=\(proxy?.proxyRules.count ?? 0)")
         var map = loadIdMap()
         map[containerId] = uuid.uuidString
         saveIdMap(map)
