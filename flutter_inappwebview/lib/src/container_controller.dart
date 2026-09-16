@@ -33,6 +33,10 @@ class ContainerController {
     return _instance ??= ContainerController();
   }
 
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.prepareContainers}
+  Future<int> prepareContainers(List<ContainerProxySpec> containers) =>
+      platform.prepareContainers(containers);
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.getAllContainerNames}
   ///
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.getAllContainerNames.supported_platforms}

@@ -184,6 +184,43 @@ public class ContainerManager: ChannelDelegate {
         ContainerManager.ensureWebKitInitialized()
         let args = call.arguments as? [String: Any]
         switch call.method {
+        case "prepareContainers":
+            // Arm every container's data store, and its proxy, inside this
+            // one call.
+            //
+            // `WKWebsiteDataStore.proxyConfigurations` only reaches the
+            // network process one of two ways: in the parameters that create
+            // the store's network session, or as an update afterwards.
+            // `WebsiteDataStore::setProxyConfigData` clears the stored data,
+            // calls `networkProcess()` -- which registers the session and
+            // takes its parameters right then -- and only then puts the data
+            // back, so the assignment that registers a session can never
+            // carry the proxy in its parameters. The update path does not
+            // take. Only stores already armed when the network process comes
+            // up get the parameters path, which is why arming one store per
+            // WebView leaves every site after the first loading direct.
+            //
+            // Hence one call, synchronous, for every container at once: the
+            // caller runs it before anything else in the process touches the
+            // network process, and every store in it lands in the same
+            // snapshot. It must stay a single channel round trip -- one per
+            // container would be one run-loop turn per container, and all but
+            // the first would miss the window.
+            let specs = args?["containers"] as? [[String: Any?]] ?? []
+            var armed = 0
+            for spec in specs {
+                guard let containerId = spec["containerId"] as? String,
+                      !containerId.isEmpty else { continue }
+                let store = ContainerManager.getOrCreateDataStore(forContainer: containerId)
+                guard let proxyMap = spec["proxySettings"] as? [String: Any?],
+                      let proxy = ProxySettings.fromMap(map: proxyMap) else { continue }
+                let configurations = proxy.toProxyConfigurations()
+                if configurations.isEmpty { continue }
+                store.proxyConfigurations = configurations
+                armed += 1
+            }
+            ContainerManager.trace("prepared \(specs.count) container(s), \(armed) proxied")
+            result(armed)
         case "getAllContainerNames":
             getAllContainerNames(result: result)
         case "hasContainer":

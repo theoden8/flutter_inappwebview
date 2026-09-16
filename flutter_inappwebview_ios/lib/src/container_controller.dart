@@ -71,6 +71,15 @@ class IOSContainerController extends PlatformContainerController
   Future<dynamic> _handleMethod(MethodCall call) async {}
 
   @override
+  Future<int> prepareContainers(List<ContainerProxySpec> containers) async {
+    if (containers.isEmpty) return 0;
+    final armed = await channel?.invokeMethod<int>('prepareContainers', {
+      'containers': containers.map((c) => c.toMap()).toList(),
+    });
+    return armed ?? 0;
+  }
+
+  @override
   Future<List<String>> getAllContainerNames() async {
     final names = await channel?.invokeMethod<List>('getAllContainerNames');
     return names?.cast<String>() ?? const <String>[];

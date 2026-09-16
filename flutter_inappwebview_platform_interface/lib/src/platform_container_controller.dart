@@ -170,6 +170,31 @@ abstract class PlatformContainerController extends PlatformInterface {
       ),
     ],
   )
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.prepareContainers}
+  ///Creates the data stores for [containers] and applies each one's proxy,
+  ///all inside a single platform call. Returns how many were given a proxy.
+  ///
+  ///This exists for one Apple-specific ordering rule.
+  ///`WKWebsiteDataStore.proxyConfigurations` reaches the network process
+  ///either in the parameters that create the store's network session or as
+  ///an update afterwards, and WebKit clears the pending proxy before the
+  ///call that registers the session — so the assignment that registers a
+  ///store can never carry the proxy in that store's session parameters, and
+  ///the update path does not take. Only stores already armed when the
+  ///network process comes up get the parameters path. Arming one store per
+  ///WebView therefore proxies whichever site is opened first and no other.
+  ///
+  ///Call this once, before anything else in the process touches the network
+  ///process, with every container that needs a proxy. It must stay one call:
+  ///one per container is one run-loop turn per container, and all but the
+  ///first miss the window.
+  ///
+  ///A no-op returning 0 off iOS / macOS. Android's `ProxyController` is
+  ///process-wide and Linux sets the proxy on the session itself, so neither
+  ///has this ordering constraint.
+  ///{@endtemplate}
+  Future<int> prepareContainers(List<ContainerProxySpec> containers) async => 0;
+
   Future<List<String>> getAllContainerNames() {
     throw UnimplementedError(
       'getAllContainerNames is not implemented on the current platform',
@@ -340,4 +365,29 @@ abstract class PlatformContainerController extends PlatformInterface {
     method,
     platform: platform,
   );
+}
+
+///One container to create up front, with the proxy to arm it with.
+///
+///See [PlatformContainerController.prepareContainers] for why the proxy has
+///to be applied before the network process comes up on iOS and macOS.
+@immutable
+class ContainerProxySpec {
+  ///Creates a new [ContainerProxySpec].
+  const ContainerProxySpec({required this.containerId, this.proxySettings});
+
+  ///The container whose data store to create, as it appears in
+  ///[InAppWebViewSettings.containerId].
+  final String containerId;
+
+  ///The proxy to arm that store with, in the same map shape as
+  ///[InAppWebViewSettings.proxySettings]. A null or unparseable value
+  ///creates the store and leaves it unproxied.
+  final Map<String, dynamic>? proxySettings;
+
+  ///Channel payload for one container.
+  Map<String, dynamic> toMap() => {
+    'containerId': containerId,
+    'proxySettings': proxySettings,
+  };
 }
