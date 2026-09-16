@@ -308,7 +308,17 @@ public class InAppWebView: WKWebView, WKUIDelegate,
         let configuration = WKWebViewConfiguration()
         // initialzie WKUserContentController here to fix possible "undefined is not an object (evaluating 'window.webkit.messageHandlers')" javascript error
         configuration.userContentController = WKUserContentController()
-        configuration.processPool = WKProcessPoolManager.sharedProcessPool
+        // A container-bound WebView gets its own pool. See
+        // WKProcessPoolManager: sharing one pool across WebViews that each
+        // carry a different WKWebsiteDataStore is the standing suspect for
+        // only the first store's proxyConfigurations being honoured.
+        if let containerId = settings?.containerId, !containerId.isEmpty,
+           !(settings?.incognito ?? false) {
+            configuration.processPool =
+                WKProcessPoolManager.processPool(forContainer: containerId)
+        } else {
+            configuration.processPool = WKProcessPoolManager.sharedProcessPool
+        }
         
         if let settings = settings {
             configuration.suppressesIncrementalRendering = settings.suppressesIncrementalRendering
@@ -341,6 +351,13 @@ public class InAppWebView: WKWebView, WKUIDelegate,
             // Per-WebView proxy. Same shape and rationale as iOS — attach
             // to whichever store the WebView ended up with so a profile-
             // bound site genuinely uses its own proxy.
+            if #available(macOS 14.0, *) {
+                ContainerManager.trace("webview proxySettings="
+                    + "\(settings.proxySettings != nil) container="
+                    + "\(settings.containerId ?? "<none>") store="
+                    + "\(ObjectIdentifier(configuration.websiteDataStore)) pool="
+                    + "\(ObjectIdentifier(configuration.processPool))")
+            }
             if let proxyMap = settings.proxySettings,
                #available(macOS 14.0, *),
                let proxy = ProxySettings.fromMap(map: proxyMap) {
