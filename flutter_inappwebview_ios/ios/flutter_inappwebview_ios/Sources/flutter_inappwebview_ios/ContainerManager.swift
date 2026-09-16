@@ -60,6 +60,16 @@ public class ContainerManager: ChannelDelegate {
     private static var sharedStores: [UUID: WKWebsiteDataStore] = [:]
     private static let sharedStoresLock = NSLock()
 
+    // The proxy each cached store was *built* with, so a request for a
+    // different one is answered with a new store rather than the cached one.
+    // WKWebsiteDataStore.proxyConfigurations only takes effect on a store
+    // that has not yet served a network load; assigning it to one already in
+    // service is accepted and ignored. A container's store outlives the
+    // WebView that created it, so without this a site keeps whatever proxy
+    // its first WebView was built with until the app is relaunched -- which
+    // is exactly what "I have to restart the app for the proxy to work" is.
+    private static var appliedProxies: [UUID: String] = [:]
+
     // WebKit-init warm-up.
     //
     // fetchAllDataStoreIdentifiers and WKWebsiteDataStore(forIdentifier:)
@@ -99,20 +109,52 @@ public class ContainerManager: ChannelDelegate {
     // clearContainerData) go through this — the WebView and the
     // controller end up holding *the same* wrapper instance for a
     // given container, which is the entire point of caching.
-    public static func getOrCreateDataStore(forContainer containerId: String) -> WKWebsiteDataStore {
+    public static func getOrCreateDataStore(
+        forContainer containerId: String,
+        proxy: ProxySettings? = nil
+    ) -> WKWebsiteDataStore {
         ensureWebKitInitialized()
         let uuid = containerIdToUUID(containerId)
+        let signature = proxySignature(proxy)
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
-        if let cached = sharedStores[uuid] {
+        if let cached = sharedStores[uuid], appliedProxies[uuid] == signature {
             return cached
         }
+        // Built again rather than re-configured: the cached store may already
+        // have served a load, and a proxy assigned to such a store is
+        // silently dropped. WKWebsiteDataStore(forIdentifier:) hands back a
+        // new wrapper over the same on-disk data, so nothing the container
+        // holds is lost -- the WebViews already using the old wrapper keep it
+        // and the proxy they were built with, which is correct: it is the
+        // next WebView that asked for a different one.
         let store = WKWebsiteDataStore(forIdentifier: uuid)
+        if let proxy = proxy {
+            store.proxyConfigurations = proxy.toProxyConfigurations()
+        }
         sharedStores[uuid] = store
+        appliedProxies[uuid] = signature
         var map = loadIdMap()
         map[containerId] = uuid.uuidString
         saveIdMap(map)
         return store
+    }
+
+    /// Stable identity for a proxy configuration. Only a change here rebuilds
+    /// a container's store, so a WebView that asks for the same proxy as the
+    /// last one still shares the cached wrapper.
+    private static func proxySignature(_ proxy: ProxySettings?) -> String {
+        guard let proxy = proxy else { return "" }
+        return proxy.proxyRules.map { rule in
+            [
+                rule.url,
+                rule.username ?? "",
+                rule.password ?? "",
+                (rule.matchDomains ?? []).joined(separator: ","),
+                (rule.excludedDomains ?? []).joined(separator: ","),
+                rule.allowFailover.map { $0 ? "1" : "0" } ?? "",
+            ].joined(separator: "|")
+        }.joined(separator: ";")
     }
 
     // Called from deleteContainer just before remove(forIdentifier:) so
@@ -122,6 +164,7 @@ public class ContainerManager: ChannelDelegate {
         let uuid = containerIdToUUID(containerId)
         sharedStoresLock.lock()
         sharedStores.removeValue(forKey: uuid)
+        appliedProxies.removeValue(forKey: uuid)
         sharedStoresLock.unlock()
     }
 

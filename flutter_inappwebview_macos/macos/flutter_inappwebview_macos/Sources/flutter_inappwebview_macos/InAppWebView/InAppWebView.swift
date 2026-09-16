@@ -336,7 +336,12 @@ public class InAppWebView: WKWebView, WKUIDelegate,
                let containerId = settings.containerId, !containerId.isEmpty,
                #available(macOS 14.0, *) {
                 configuration.websiteDataStore =
-                    ContainerManager.getOrCreateDataStore(forContainer: containerId)
+                    ContainerManager.getOrCreateDataStore(
+                        forContainer: containerId,
+                        // Handed in rather than assigned to the store afterwards: a
+                        // container's store is cached for the process, and a proxy set
+                        // on one that has already served a load is ignored.
+                        proxy: settings.proxySettings.flatMap { ProxySettings.fromMap(map: $0) })
             }
             // Per-WebView proxy. Same shape and rationale as iOS — attach
             // to whichever store the WebView ended up with so a profile-
