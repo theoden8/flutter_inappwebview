@@ -57,16 +57,6 @@ public class ContainerManager: ChannelDelegate {
     private static var sharedStores: [UUID: WKWebsiteDataStore] = [:]
     private static let sharedStoresLock = NSLock()
 
-    // The proxy each cached store was *built* with, so a request for a
-    // different one is answered with a new store rather than the cached one.
-    // WKWebsiteDataStore.proxyConfigurations only takes effect on a store
-    // that has not yet served a network load; assigning it to one already in
-    // service is accepted and ignored. A container's store outlives the
-    // WebView that created it, so without this a site keeps whatever proxy
-    // its first WebView was built with until the app is relaunched -- which
-    // is exactly what "I have to restart the app for the proxy to work" is.
-    private static var appliedProxies: [UUID: String] = [:]
-
     // WebKit-init warm-up.
     //
     // fetchAllDataStoreIdentifiers and WKWebsiteDataStore(forIdentifier:)
@@ -105,27 +95,24 @@ public class ContainerManager: ChannelDelegate {
     ) -> WKWebsiteDataStore {
         ensureWebKitInitialized()
         let uuid = containerIdToUUID(containerId)
-        let signature = proxySignature(proxy)
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
-        if let cached = sharedStores[uuid], appliedProxies[uuid] == signature {
-            ContainerManager.trace("reused \(containerId) "
-                + "proxyRules=\(proxy?.proxyRules.count ?? 0)")
-            return cached
-        }
-        // Built again rather than re-configured: the cached store may already
-        // have served a load, and a proxy assigned to such a store is
-        // silently dropped. WKWebsiteDataStore(forIdentifier:) hands back a
-        // new wrapper over the same on-disk data, so nothing the container
-        // holds is lost -- the WebViews already using the old wrapper keep it
-        // and the proxy they were built with, which is correct: it is the
-        // next WebView that asked for a different one.
-        let store = WKWebsiteDataStore(forIdentifier: uuid)
+        // Applied on every lookup, cached or not. Re-creating the store to
+        // get a clean one was tried and does nothing: WKWebsiteDataStore
+        // (forIdentifier:) is itself cached by WebKit, and a second call for
+        // the same UUID hands back the *same object* -- measured, same
+        // ObjectIdentifier across two WebViews in one container. So there is
+        // no way to give a container a store that has not been used yet.
+        let store = sharedStores[uuid] ?? WKWebsiteDataStore(forIdentifier: uuid)
         if let proxy = proxy {
             store.proxyConfigurations = proxy.toProxyConfigurations()
         }
+        if sharedStores[uuid] != nil {
+            ContainerManager.trace("reused \(containerId) "
+                + "proxyRules=\(proxy?.proxyRules.count ?? 0)")
+            return store
+        }
         sharedStores[uuid] = store
-        appliedProxies[uuid] = signature
         ContainerManager.trace("built \(containerId) "
             + "proxyRules=\(proxy?.proxyRules.count ?? 0)")
         var map = loadIdMap()
@@ -154,28 +141,10 @@ public class ContainerManager: ChannelDelegate {
         }
     }
 
-    /// Stable identity for a proxy configuration. Only a change here rebuilds
-    /// a container's store, so a WebView that asks for the same proxy as the
-    /// last one still shares the cached wrapper.
-    private static func proxySignature(_ proxy: ProxySettings?) -> String {
-        guard let proxy = proxy else { return "" }
-        return proxy.proxyRules.map { rule in
-            [
-                rule.url,
-                rule.username ?? "",
-                rule.password ?? "",
-                (rule.matchDomains ?? []).joined(separator: ","),
-                (rule.excludedDomains ?? []).joined(separator: ","),
-                rule.allowFailover.map { $0 ? "1" : "0" } ?? "",
-            ].joined(separator: "|")
-        }.joined(separator: ";")
-    }
-
     private static func evictDataStore(forContainer containerId: String) {
         let uuid = containerIdToUUID(containerId)
         sharedStoresLock.lock()
         sharedStores.removeValue(forKey: uuid)
-        appliedProxies.removeValue(forKey: uuid)
         sharedStoresLock.unlock()
     }
 
