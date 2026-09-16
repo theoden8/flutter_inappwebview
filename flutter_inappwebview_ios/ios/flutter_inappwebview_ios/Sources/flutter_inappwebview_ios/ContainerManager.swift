@@ -119,7 +119,7 @@ public class ContainerManager: ChannelDelegate {
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
         if let cached = sharedStores[uuid], appliedProxies[uuid] == signature {
-            print("[container-store] reused \(containerId) "
+            ContainerManager.trace("reused \(containerId) "
                 + "proxyRules=\(proxy?.proxyRules.count ?? 0)")
             return cached
         }
@@ -136,16 +136,32 @@ public class ContainerManager: ChannelDelegate {
         }
         sharedStores[uuid] = store
         appliedProxies[uuid] = signature
-        // Printed, not logged: the only tier that exercises this is a
-        // `flutter test` run whose stdout is the record, and a per-site proxy
-        // that fails to bind is otherwise indistinguishable from one that
-        // binds and is ignored.
-        print("[container-store] built \(containerId) "
+        ContainerManager.trace("built \(containerId) "
             + "proxyRules=\(proxy?.proxyRules.count ?? 0)")
         var map = loadIdMap()
         map[containerId] = uuid.uuidString
         saveIdMap(map)
         return store
+    }
+
+    /// Diagnostics sink for the integration tier.
+    ///
+    /// A file, not `print`: the only tier that runs this path is
+    /// `flutter test`, which does not capture the host app's stdout, so the
+    /// last round of instrumentation produced nothing at all. The test runs
+    /// inside this process, so its Dart side reads the same temporary
+    /// directory and prints the contents into its own output.
+    static func trace(_ message: String) {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("webspace-container-store.log")
+        guard let data = (message + "\n").data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: url)
+        }
     }
 
     /// Stable identity for a proxy configuration. Only a change here rebuilds

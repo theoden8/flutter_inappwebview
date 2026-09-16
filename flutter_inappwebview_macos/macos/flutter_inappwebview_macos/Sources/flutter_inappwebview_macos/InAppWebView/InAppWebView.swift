@@ -346,10 +346,12 @@ public class InAppWebView: WKWebView, WKUIDelegate,
             // Per-WebView proxy. Same shape and rationale as iOS — attach
             // to whichever store the WebView ended up with so a profile-
             // bound site genuinely uses its own proxy.
-            print("[container-store] webview proxySettings="
-                + "\(settings.proxySettings != nil) containerId="
-                + "\(settings.containerId ?? "<none>") store="
-                + "\(ObjectIdentifier(configuration.websiteDataStore))")
+            if #available(macOS 14.0, *) {
+                ContainerManager.trace("webview proxySettings="
+                    + "\(settings.proxySettings != nil) containerId="
+                    + "\(settings.containerId ?? "<none>") store="
+                    + "\(ObjectIdentifier(configuration.websiteDataStore))")
+            }
             if let proxyMap = settings.proxySettings,
                #available(macOS 14.0, *),
                let proxy = ProxySettings.fromMap(map: proxyMap) {
