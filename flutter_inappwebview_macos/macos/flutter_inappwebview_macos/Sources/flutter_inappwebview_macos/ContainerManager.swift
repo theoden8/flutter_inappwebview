@@ -95,6 +95,7 @@ public class ContainerManager: ChannelDelegate {
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
         if let cached = sharedStores[uuid] {
+            ContainerManager.trace("reused \(containerId)")
             return cached
         }
         let store = WKWebsiteDataStore(forIdentifier: uuid)
@@ -105,6 +106,7 @@ public class ContainerManager: ChannelDelegate {
         // assigns it to this same store after we return.
         ProxyManager.applyActiveProxyOverride(to: store)
         sharedStores[uuid] = store
+        ContainerManager.trace("built \(containerId)")
         var map = loadIdMap()
         map[containerId] = uuid.uuidString
         saveIdMap(map)
@@ -118,6 +120,25 @@ public class ContainerManager: ChannelDelegate {
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
         return Array(sharedStores.values)
+    }
+
+    /// Diagnostics sink for the integration tier.
+    ///
+    /// A file, not `print`: `flutter test` does not capture the host app's
+    /// stdout, so print() diagnostics are discarded. The integration test runs
+    /// inside this process, so its Dart side reads the same temporary
+    /// directory and prints the contents into its own output.
+    static func trace(_ message: String) {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("webspace-container-store.log")
+        guard let data = (message + "\n").data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: url)
+        }
     }
 
     private static func evictDataStore(forContainer containerId: String) {

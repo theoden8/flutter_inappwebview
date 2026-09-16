@@ -713,7 +713,17 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
         let configuration = WKWebViewConfiguration()
         // initialzie WKUserContentController here to fix possible "undefined is not an object (evaluating 'window.webkit.messageHandlers')" javascript error
         configuration.userContentController = WKUserContentController()
-        configuration.processPool = WKProcessPoolManager.sharedProcessPool
+        // A container-bound WebView gets its own pool. See
+        // WKProcessPoolManager: sharing one pool across WebViews that each
+        // carry a different WKWebsiteDataStore is the standing suspect for
+        // only the first store's proxyConfigurations being honoured.
+        if let containerId = settings?.containerId, !containerId.isEmpty,
+           !(settings?.incognito ?? false) {
+            configuration.processPool =
+                WKProcessPoolManager.processPool(forContainer: containerId)
+        } else {
+            configuration.processPool = WKProcessPoolManager.sharedProcessPool
+        }
         
         if let settings = settings {
             configuration.allowsInlineMediaPlayback = settings.allowsInlineMediaPlayback
@@ -764,6 +774,13 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 // profile genuinely uses its own proxy. On <iOS 17 this is a
                 // no-op and the WebView falls back to the system / global
                 // ProxyController override.
+                if #available(iOS 17.0, *) {
+                    ContainerManager.trace("webview proxySettings="
+                        + "\(settings.proxySettings != nil) container="
+                        + "\(settings.containerId ?? "<none>") store="
+                        + "\(ObjectIdentifier(configuration.websiteDataStore)) pool="
+                        + "\(ObjectIdentifier(configuration.processPool))")
+                }
                 if let proxyMap = settings.proxySettings,
                    #available(iOS 17.0, *),
                    let proxy = ProxySettings.fromMap(map: proxyMap) {
