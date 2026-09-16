@@ -713,17 +713,7 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
         let configuration = WKWebViewConfiguration()
         // initialzie WKUserContentController here to fix possible "undefined is not an object (evaluating 'window.webkit.messageHandlers')" javascript error
         configuration.userContentController = WKUserContentController()
-        // A container-bound WebView gets its own pool. See
-        // WKProcessPoolManager: sharing one pool across WebViews that each
-        // carry a different WKWebsiteDataStore is the standing suspect for
-        // only the first store's proxyConfigurations being honoured.
-        if let containerId = settings?.containerId, !containerId.isEmpty,
-           !(settings?.incognito ?? false) {
-            configuration.processPool =
-                WKProcessPoolManager.processPool(forContainer: containerId)
-        } else {
-            configuration.processPool = WKProcessPoolManager.sharedProcessPool
-        }
+        configuration.processPool = WKProcessPoolManager.sharedProcessPool
         
         if let settings = settings {
             configuration.allowsInlineMediaPlayback = settings.allowsInlineMediaPlayback
