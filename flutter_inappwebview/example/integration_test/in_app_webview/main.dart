@@ -204,5 +204,6 @@ void main() {
     keepAlive();
     containerIsolation();
     perWebViewProxy();
+    perWebViewProxyIsolation();
   }, skip: shouldSkip);
 }
