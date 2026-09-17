@@ -353,6 +353,13 @@ public class InAppWebView: WKWebView, WKUIDelegate,
                let proxy = ProxySettings.fromMap(map: proxyMap) {
                 configuration.websiteDataStore.proxyConfigurations =
                     proxy.toProxyConfigurations()
+                // Exempts this store from ProxyManager's process-wide
+                // fan-out, which would otherwise overwrite the proxy the
+                // site asked for with the global one -- or, on a clear,
+                // drop the site to the device IP.
+                ProxyManager.pinPerSiteProxy(to: configuration.websiteDataStore)
+            } else if #available(macOS 14.0, *) {
+                ProxyManager.releasePerSiteProxy(from: configuration.websiteDataStore)
             }
             if !settings.applicationNameForUserAgent.isEmpty {
                 if let applicationNameForUserAgent = configuration.applicationNameForUserAgent {
