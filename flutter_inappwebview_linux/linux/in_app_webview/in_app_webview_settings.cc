@@ -403,12 +403,19 @@ void InAppWebViewSettings::applyWpePlatformSettings(void* display_ptr) const {
     g_clear_error(&error);
   }
 
-  // Apply disable animations setting
+  // Apply disable animations setting.
+  //
+  // Guarded: WPE_SETTING_DISABLE_ANIMATIONS is not in every WPEPlatform
+  // release, and the neighbouring settings here are. Building against one
+  // that lacks it is otherwise a hard "use of undeclared identifier", which
+  // takes the whole Linux target down over one optional setting.
+#ifdef WPE_SETTING_DISABLE_ANIMATIONS
   if (disableAnimations.has_value()) {
     wpe_settings_set_boolean(wpe_settings, WPE_SETTING_DISABLE_ANIMATIONS,
                              disableAnimations.value(), WPE_SETTINGS_SOURCE_APPLICATION, &error);
     g_clear_error(&error);
   }
+#endif
 
   // Apply font antialias setting
   if (fontAntialias.has_value()) {
