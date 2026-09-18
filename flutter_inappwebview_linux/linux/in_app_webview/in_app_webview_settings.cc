@@ -405,7 +405,14 @@ void InAppWebViewSettings::applyWpePlatformSettings(void* display_ptr) const {
 
   // Apply disable animations setting
   if (disableAnimations.has_value()) {
-    wpe_settings_set_boolean(wpe_settings, WPE_SETTING_DISABLE_ANIMATIONS,
+    // [WebSpace fork patch] WPE 2.54 renamed this key and removed the old
+    // macro, so take whichever one the headers being built against define.
+#ifdef WPE_SETTING_REDUCED_MOTION
+    const char* const reduced_motion_key = WPE_SETTING_REDUCED_MOTION;
+#else
+    const char* const reduced_motion_key = WPE_SETTING_DISABLE_ANIMATIONS;
+#endif
+    wpe_settings_set_boolean(wpe_settings, reduced_motion_key,
                              disableAnimations.value(), WPE_SETTINGS_SOURCE_APPLICATION, &error);
     g_clear_error(&error);
   }
