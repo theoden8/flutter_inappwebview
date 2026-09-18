@@ -76,7 +76,27 @@ public class ProxyManager: ChannelDelegate {
         perSiteProxyStores.remove(store)
         perSiteProxyLock.unlock()
         guard wasPinned else { return }
-        store.proxyConfigurations = activeProxyConfigurations ?? []
+        ProxyManager.assignProxyConfigurations(activeProxyConfigurations ?? [],
+                                               to: store, reason: "release")
+    }
+
+    // Every write to `proxyConfigurations` in this plugin goes through here.
+    // An empty array is not "no proxy for this store": WebKit turns it into
+    // clearProxyConfigData, which calls nw_context_clear_proxies on the live
+    // network context of every session that store owns
+    // (NetworkSessionCocoa.mm). Order and emptiness are what a run has to be
+    // able to report back, so the trace records both.
+    //
+    // No lock is held across the assignment: carriesPerSiteProxy takes and
+    // releases perSiteProxyLock before WebKit is touched.
+    static func assignProxyConfigurations(_ configurations: [ProxyConfiguration],
+                                          to store: WKWebsiteDataStore,
+                                          reason: String) {
+        ContainerManager.trace("proxy-assign reason=\(reason)"
+            + " store=\(ObjectIdentifier(store))"
+            + " count=\(configurations.count)"
+            + " pinned=\(carriesPerSiteProxy(store))")
+        store.proxyConfigurations = configurations
     }
 
     static func carriesPerSiteProxy(_ store: WKWebsiteDataStore) -> Bool {
@@ -94,7 +114,8 @@ public class ProxyManager: ChannelDelegate {
         if carriesPerSiteProxy(store) {
             return
         }
-        store.proxyConfigurations = proxyConfigurations
+        ProxyManager.assignProxyConfigurations(proxyConfigurations, to: store,
+                                               reason: "replay")
     }
 
     public func setProxyOverride(_ settings: ProxySettings) {
@@ -118,12 +139,16 @@ public class ProxyManager: ChannelDelegate {
     static func fanOutToFollowingStores(_ proxyConfigurations: [ProxyConfiguration]) {
         let defaultStore = WKWebsiteDataStore.default()
         if !carriesPerSiteProxy(defaultStore) {
-            defaultStore.proxyConfigurations = proxyConfigurations
+            assignProxyConfigurations(proxyConfigurations, to: defaultStore,
+                                      reason: "fanout-default")
         }
-        WKWebsiteDataStore.nonPersistent().proxyConfigurations = proxyConfigurations
+        assignProxyConfigurations(proxyConfigurations,
+                                  to: WKWebsiteDataStore.nonPersistent(),
+                                  reason: "fanout-ephemeral")
         for store in ContainerManager.allCachedDataStores()
         where !carriesPerSiteProxy(store) {
-            store.proxyConfigurations = proxyConfigurations
+            assignProxyConfigurations(proxyConfigurations, to: store,
+                                      reason: "fanout-container")
         }
     }
 

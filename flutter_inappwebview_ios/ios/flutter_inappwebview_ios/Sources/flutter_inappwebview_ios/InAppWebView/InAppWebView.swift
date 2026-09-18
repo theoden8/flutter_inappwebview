@@ -774,8 +774,10 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 if let proxyMap = settings.proxySettings,
                    #available(iOS 17.0, *),
                    let proxy = ProxySettings.fromMap(map: proxyMap) {
-                    configuration.websiteDataStore.proxyConfigurations =
-                        proxy.toProxyConfigurations()
+                    ProxyManager.assignProxyConfigurations(
+                        proxy.toProxyConfigurations(),
+                        to: configuration.websiteDataStore,
+                        reason: "per-site")
                     // Exempts this store from ProxyManager's process-wide
                     // fan-out, which would otherwise overwrite the proxy the
                     // site asked for with the global one -- or, on a clear,
