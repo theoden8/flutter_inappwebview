@@ -125,13 +125,15 @@ public class InAppWebView: WKWebView, WKUIDelegate,
     // proxy to be, read back rather than assumed. The proxy-assign trace
     // proves the plugin sets exactly one config per store; this says
     // whether the WebView is still on that store and still carries it by
-    // the time a load starts. `count=-1` means the property read nil.
+    // the time a load starts. Swift refines the property to a
+    // non-optional array, so an unset proxy and an empty one both
+    // read as count=0.
     func traceProxyReadback(_ at: String) {
         if #available(macOS 14.0, *) {
             let store = configuration.websiteDataStore
             ContainerManager.trace("proxy-readback at=\(at)"
                 + " store=\(ObjectIdentifier(store))"
-                + " count=\(store.proxyConfigurations?.count ?? -1)")
+                + " count=\(store.proxyConfigurations.count)")
         }
     }
 
