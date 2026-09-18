@@ -1,3 +1,8 @@
+## Unreleased (WebSpace fork)
+
+- [WebSpace fork patch] `InAppWebViewSettings.userAgentMetadata` is serialized through to native but WPE has no UA-CH plumbing and the setting is silently ignored. Kept so backup JSON stays portable across platforms.
+- [WebSpace fork patch] `InAppWebViewSettings.disableAnimations` now resolves its WPEPlatform key at compile time: WPE 2.54 renamed `WPE_SETTING_DISABLE_ANIMATIONS` to `WPE_SETTING_REDUCED_MOTION` and dropped the old macro, which broke the build on any WPEPlatform-enabled 2.54 toolchain (Debian sid's wpewebkit 2.54.0-1 is the first to ship `wpe-platform-2.0.pc`). Headers defining neither key skip the setting instead of failing to build.
+
 ## 0.1.0-beta.2
 
 - Fixed `onReceivedHttpAuthRequest` never reaching the app: the challenge's `previousFailureCount` was `null`. It is now `0` for a first challenge and `1` for a retry, as WPE WebKit only reports whether a request is a retry
