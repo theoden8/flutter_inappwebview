@@ -209,6 +209,11 @@ InAppWebViewSettings::InAppWebViewSettings(FlValue* map) : InAppWebViewSettings(
   // === Container join ===
   containerId = get_fl_map_value(map, "containerId", containerId);
 
+  // === Per-site proxy ===
+  if (fl_map_contains_not_null(map, "proxySettings")) {
+    proxySettings = ProxySettings(fl_value_lookup_string(map, "proxySettings"));
+  }
+
   // === CORS allowlist ===
   if (fl_map_contains_not_null(map, "corsAllowlist")) {
     corsAllowlist =

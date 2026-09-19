@@ -24,19 +24,30 @@ bool string_equals(const gchar* a, const char* b) {
 // the fan-out, contained WebViews use a per-container session that
 // never sees the override, so they'd silently bypass the proxy the
 // caller asked the platform to apply process-wide.
+// A container that pinned its own proxy is excluded: its session carries the
+// site's choice, and a process-wide override must not overwrite it. That is
+// the whole point of the pin -- without this, the last site activated would
+// decide every container's proxy.
 std::vector<WebKitNetworkSession*> sessions_to_apply_proxy_to() {
   std::vector<WebKitNetworkSession*> sessions;
   WebKitNetworkSession* defaultSession = webkit_network_session_get_default();
   if (defaultSession != nullptr) {
     sessions.push_back(defaultSession);
   }
+  const auto& pins = container_proxy_pins();
   for (const auto& entry : container_session_cache()) {
-    if (entry.second != nullptr && entry.second != defaultSession) {
-      sessions.push_back(entry.second);
-    }
+    if (entry.second == nullptr || entry.second == defaultSession) continue;
+    if (pins.find(entry.first) != pins.end()) continue;
+    sessions.push_back(entry.second);
   }
   return sessions;
 }
+
+// Sets one session's proxy from `settings`. A null build result means the
+// settings named no usable proxy; leaving the session alone is right there,
+// because the caller's fail-closed path decides what to do about it.
+void apply_proxy_to_session(WebKitNetworkSession* session,
+                            const ProxySettings& settings);
 
 // The override the Dart side last asked for, or nullopt when none is active
 // (never set, or cleared). Sessions outlive no one: container sessions are
@@ -122,6 +133,17 @@ WebKitNetworkProxySettings* build_proxy_settings(const ProxySettings& settings) 
 
   return proxySettings;
 }
+void apply_proxy_to_session(WebKitNetworkSession* session,
+                            const ProxySettings& settings) {
+  WebKitNetworkProxySettings* proxySettings = build_proxy_settings(settings);
+  if (proxySettings == nullptr) {
+    return;
+  }
+  webkit_network_session_set_proxy_settings(
+      session, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxySettings);
+  webkit_network_proxy_settings_free(proxySettings);
+}
+
 }  // namespace
 
 // === ProxyRule ===
@@ -268,14 +290,44 @@ void apply_active_proxy_override(WebKitNetworkSession* session) {
     return;
   }
 
-  WebKitNetworkProxySettings* proxySettings = build_proxy_settings(active.value());
-  if (proxySettings == nullptr) {
+  apply_proxy_to_session(session, active.value());
+}
+
+std::unordered_map<std::string, ProxySettings>& container_proxy_pins() {
+  static std::unordered_map<std::string, ProxySettings> pins;
+  return pins;
+}
+
+void pin_container_proxy(const std::string& id, const ProxySettings& settings) {
+  if (id.empty()) {
     return;
   }
+  container_proxy_pins()[id] = settings;
 
-  webkit_network_session_set_proxy_settings(
-      session, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxySettings);
-  webkit_network_proxy_settings_free(proxySettings);
+  // The session is usually created right after this, and
+  // apply_container_proxy will pick the pin up then. But a WebView joining a
+  // container that already exists -- a second WebView on the same site, or a
+  // site whose proxy the user just changed -- gets no new session, so the pin
+  // has to reach the live one here.
+  auto& cache = container_session_cache();
+  auto it = cache.find(id);
+  if (it != cache.end() && it->second != nullptr) {
+    apply_proxy_to_session(it->second, settings);
+  }
+}
+
+void apply_container_proxy(const std::string& id,
+                           WebKitNetworkSession* session) {
+  if (session == nullptr) {
+    return;
+  }
+  const auto& pins = container_proxy_pins();
+  auto it = pins.find(id);
+  if (it != pins.end()) {
+    apply_proxy_to_session(session, it->second);
+    return;
+  }
+  apply_active_proxy_override(session);
 }
 
 }  // namespace flutter_inappwebview_plugin

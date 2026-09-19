@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "types/channel_delegate.h"
@@ -83,6 +84,32 @@ class ProxyManager : public ChannelDelegate {
  * platform to apply process-wide. Called by get_or_create_container_session.
  */
 void apply_active_proxy_override(WebKitNetworkSession* session);
+
+/**
+ * Per-container proxy pins, keyed by containerId.
+ *
+ * WPE applies a proxy to one `WebKitNetworkSession`, and every container owns
+ * one, so unlike Apple's `WKWebsiteDataStore.proxyConfigurations` two
+ * containers really can hold two different proxies at the same time
+ * (BUG-014). A pin records that a container's proxy is the site's own choice
+ * rather than the process-wide override, so the fan-out below leaves it
+ * alone.
+ */
+std::unordered_map<std::string, ProxySettings>& container_proxy_pins();
+
+/**
+ * Pin `id`'s session to `settings` and apply it if that session already
+ * exists. Called at WebView construction, before the session is created, so
+ * the proxy is in place before the container's first request.
+ */
+void pin_container_proxy(const std::string& id, const ProxySettings& settings);
+
+/**
+ * Apply whichever proxy `id` should be on: its own pin if it has one, else
+ * the process-wide override. Called by get_or_create_container_session.
+ */
+void apply_container_proxy(const std::string& id,
+                           WebKitNetworkSession* session);
 
 }  // namespace flutter_inappwebview_plugin
 

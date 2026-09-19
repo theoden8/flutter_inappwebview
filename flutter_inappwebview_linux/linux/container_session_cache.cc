@@ -52,9 +52,13 @@ WebKitNetworkSession* get_or_create_container_session(const std::string& id) {
   // proxy), and ProxyManager only reaches the sessions cached when
   // setProxyOverride ran. Since this session is created lazily — the first
   // time a WebView joins this container, typically well after the app set its
-  // process-wide proxy at startup — it has to pick the override up here, or
-  // the contained site goes out over the device IP.
-  apply_active_proxy_override(session);
+  // process-wide proxy at startup — it has to pick its proxy up here, or the
+  // contained site goes out over the device IP.
+  //
+  // The container's own pin wins over the process-wide override: a site that
+  // chose a proxy gets that proxy, and only a site that chose none follows
+  // the global one.
+  apply_container_proxy(id, session);
 
   // The cache holds the canonical reference. Each call site that uses
   // the returned session takes its own ref via g_object_new's

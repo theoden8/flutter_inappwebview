@@ -8,6 +8,7 @@
 #include "in_app_webview.h"
 
 #include "../container_session_cache.h"
+#include "../proxy_manager.h"
 
 #include <dlfcn.h>
 #include <linux/limits.h>
@@ -703,6 +704,16 @@ void InAppWebView::InitWebView(const InAppWebViewCreationParams& params) {
     // Container join: use a process-wide cached WebKitNetworkSession with
     // its own data + cache directories. Multiple WebViews joining the
     // same container share storage. incognito always wins.
+    //
+    // Pin the site's proxy first: the session may not exist yet, and its
+    // proxy has to be in place before the container's first request rather
+    // than after it. WPE binds a proxy per session, so two containers hold
+    // two different proxies at once -- the divergence from Apple, where only
+    // the first WebView in the process is proxied at all (BUG-014).
+    if (params.initialSettings->proxySettings.has_value()) {
+      pin_container_proxy(params.initialSettings->containerId,
+                          params.initialSettings->proxySettings.value());
+    }
     networkSession = get_or_create_container_session(
         params.initialSettings->containerId);
     if (networkSession != nullptr) {
@@ -876,7 +887,12 @@ void InAppWebView::InitWebView(const InAppWebViewCreationParams& params) {
       debugLog("InAppWebView: Creating WebView with ephemeral (incognito) network session");
     } else if (params.initialSettings &&
                !params.initialSettings->containerId.empty()) {
-      // Container join: see the WPEPlatform branch above for details.
+      // Container join: see the WPEPlatform branch above for details,
+      // including why the proxy is pinned before the session is fetched.
+      if (params.initialSettings->proxySettings.has_value()) {
+        pin_container_proxy(params.initialSettings->containerId,
+                            params.initialSettings->proxySettings.value());
+      }
       networkSession = get_or_create_container_session(
           params.initialSettings->containerId);
       if (networkSession != nullptr) {

@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "../proxy_manager.h"
+
 namespace flutter_inappwebview_plugin {
 
 class InAppWebView;
@@ -151,6 +153,20 @@ class InAppWebViewSettings {
   // Honored on WPE WebKit 2.40+. Ignored on older runtimes (the
   // network-session API isn't there).
   std::string containerId;
+
+  // === Per-site proxy ===
+  // The proxy this WebView's network session should use, overriding any
+  // process-wide override for that session alone. Bound at construction
+  // like `containerId`, because a session's proxy has to be in place before
+  // the first request leaves it.
+  //
+  // WPE applies proxies per `WebKitNetworkSession`
+  // (`webkit_network_session_set_proxy_settings`), and every container
+  // already owns one, so two containers can hold two different proxies at
+  // once. That is the divergence from Apple, where
+  // `WKWebsiteDataStore.proxyConfigurations` is honoured only for the first
+  // WebView in the process (BUG-014).
+  std::optional<ProxySettings> proxySettings;
 
   // === CORS allowlist ===
   // List of URI patterns for which CORS checks are disabled
