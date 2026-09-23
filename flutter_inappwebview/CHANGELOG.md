@@ -36,6 +36,7 @@
 - Implemented `PlatformContainerController` and `InAppWebViewSettings.containerId` via `androidx.webkit.Profile` (System WebView 119+)
 - `CookieManager` methods taking a `webViewId` use the cookie jar of that WebView's container, and `flush` also flushes every container
 - Fixed `CookieManager.flush` never completing
+- `ProxyController.setProxyOverride` refuses a `ProxySettings` with no proxy and no direct rule
 - Updated native dependencies:
   - implementation from `'androidx.webkit:webkit:1.12.0'` to `'androidx.webkit:webkit:1.14.0'`
   - implementation from `'androidx.browser:browser:1.8.0'` to `'androidx.browser:browser:1.9.0'`
