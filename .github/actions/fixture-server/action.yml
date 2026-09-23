@@ -1,0 +1,42 @@
+name: Start the test fixture server
+description: >
+  Starts test_node_server -- HTTP fixtures plus two tagged proxies on 8083 and
+  8084 -- and writes integration_test/env.dart pointing at it. The address has
+  to be one the device under test can reach.
+inputs:
+  node-server-ip:
+    description: Address the device under test uses to reach this machine
+    required: true
+  start:
+    description: >
+      Start the server in the background. On Windows a process started by one
+      step does not outlive it, so pass 'false' there and start it (then run
+      wait.js) in the step that needs it.
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - shell: bash
+      working-directory: test_node_server
+      run: npm install --no-audit --no-fund
+
+    - shell: bash
+      env:
+        NODE_SERVER_IP: ${{ inputs.node-server-ip }}
+      run: |
+        echo "NODE_SERVER_IP=$NODE_SERVER_IP"
+        dart tool/env.dart
+        cat flutter_inappwebview/example/integration_test/env.dart
+
+    - if: inputs.start == 'true'
+      shell: bash
+      working-directory: test_node_server
+      run: nohup node index.js > "$RUNNER_TEMP/node_server.log" 2>&1 &
+
+    - if: inputs.start == 'true'
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/wait.js"

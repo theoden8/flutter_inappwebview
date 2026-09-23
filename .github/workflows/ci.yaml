@@ -1,0 +1,337 @@
+name: CI
+
+# One job per platform, each running what it can: the native unit tests
+# (XCTest RunnerTests on Apple, the gtest target on Linux; Windows' test target
+# is the plugin template's scaffold and does not compile) and the
+# integration tests against the repo's own fixture server, plus an analyzer
+# pass over every package. Integration tests build upstream's own entrypoint,
+# integration_test/webview_flutter_test.dart, so the whole suite has to
+# compile, but run only the proxy and container tests by default -- the rest
+# of the suite was written to be run by hand against a device and has never
+# run in CI -- and a dispatch can widen the filter.
+on:
+  workflow_dispatch:
+    inputs:
+      test_filter:
+        description: 'flutter test --name regex for the integration tests'
+        default: '[Pp]roxy|[Cc]ontainer'
+  push:
+    branches:
+      - 'ci/**'
+      - 'claude/improve-inappwebview-isolation-2mUko'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TEST_FILTER: ${{ github.event.inputs.test_filter || '[Pp]roxy|[Cc]ontainer' }}
+  INTEGRATION_TESTS: integration_test/webview_flutter_test.dart
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/pub-overrides
+      # The example's integration tests import a generated env.dart.
+      - run: NODE_SERVER_IP=127.0.0.1 dart tool/env.dart
+      # Errors only: upstream carries plenty of infos and warnings.
+      - name: flutter analyze
+        run: |
+          status=0
+          for dir in flutter_inappwebview*/ flutter_inappwebview*/example/; do
+            [ -f "$dir/pubspec.yaml" ] || continue
+            echo "::group::$dir"
+            (cd "$dir" && flutter pub get && flutter analyze --no-fatal-infos --no-fatal-warnings) || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/pub-overrides
+      - run: echo "NODE_SERVER_IP=$(ipconfig getifaddr en0)" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/fixture-server
+        with:
+          node-server-ip: ${{ env.NODE_SERVER_IP }}
+      - name: RunnerTests
+        working-directory: flutter_inappwebview_macos/example
+        run: |
+          flutter pub get
+          flutter build macos --debug
+          xcodebuild test -workspace macos/Runner.xcworkspace -scheme Runner \
+            -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+      - name: Integration tests
+        working-directory: flutter_inappwebview/example
+        run: |
+          flutter pub get
+          flutter test $INTEGRATION_TESTS -d macos --name "$TEST_FILTER" --file-reporter "json:$RUNNER_TEMP/tests.json"
+          python3 ../../.github/scripts/tests_ran.py "$RUNNER_TEMP/tests.json"
+      - if: always()
+        run: cat "$RUNNER_TEMP"/node_server*.log || true
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/pub-overrides
+      # The simulator shares the host's network stack.
+      - run: echo "NODE_SERVER_IP=$(ipconfig getifaddr en0)" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/fixture-server
+        with:
+          node-server-ip: ${{ env.NODE_SERVER_IP }}
+      - name: Boot the newest iPhone simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          ios = sorted(k for k in devices if ".iOS-" in k)
+          iphones = [d for d in devices[ios[-1]] if d["name"].startswith("iPhone")]
+          print(iphones[0]["udid"])')
+          echo "Simulator: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+      - name: RunnerTests
+        working-directory: flutter_inappwebview_ios/example
+        run: |
+          flutter pub get
+          flutter build ios --simulator --debug
+          xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner \
+            -destination "id=$SIM_UDID" CODE_SIGNING_ALLOWED=NO
+      # xcodebuild test leaves the simulator shut down.
+      - name: Integration tests
+        working-directory: flutter_inappwebview/example
+        run: |
+          xcrun simctl boot "$SIM_UDID" || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          flutter pub get
+          flutter test $INTEGRATION_TESTS -d "$SIM_UDID" --name "$TEST_FILTER" --file-reporter "json:$RUNNER_TEMP/tests.json"
+          python3 ../../.github/scripts/tests_ran.py "$RUNNER_TEMP/tests.json"
+      - if: always()
+        run: cat "$RUNNER_TEMP"/node_server*.log || true
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # Ubuntu 24.04 ships no WPE WebKit at all, and Debian trixie's 2.48 is
+    # older than the plugin's webkit_web_view_get_theme_color (2.50).
+    # Debian forky ships 2.52.
+    container: debian:forky
+    env:
+      # The googletest the plugin's test target fetches predates CMake 4's
+      # minimum.
+      CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+      # WebKit starts its web process under bubblewrap, which cannot set up
+      # its mount namespace inside the job container, so the UI process
+      # aborts on the first WebView.
+      WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: System packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates unzip xz-utils zip jq file python3 iproute2 procps \
+            clang g++ cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+            libepoxy-dev libsecret-1-dev libwayland-dev \
+            libwpewebkit-2.0-dev libwpe-1.0-dev libwpebackend-fdo-1.0-dev \
+            xvfb xauth libegl1 libegl-mesa0 libgl1-mesa-dri
+          git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - uses: ./.github/actions/pub-overrides
+      - run: |
+          echo "NODE_SERVER_IP=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/fixture-server
+        with:
+          node-server-ip: ${{ env.NODE_SERVER_IP }}
+      # Also the only thing in CI that compiles the Linux plugin for real.
+      - name: Native unit tests (gtest)
+        working-directory: flutter_inappwebview_linux/example
+        run: |
+          flutter pub get
+          flutter build linux --debug
+          runner=$(find build/linux -name flutter_inappwebview_linux_test -type f | head -1)
+          test -n "$runner" || { echo "gtest runner was not built"; exit 1; }
+          "$runner"
+      - name: Integration tests
+        working-directory: flutter_inappwebview/example
+        run: |
+          flutter pub get
+          # On Linux the runner can report every test and still count none,
+          # exiting 79 ("no tests ran"); the JSON report is what decides.
+          rc=0
+          xvfb-run -a flutter test $INTEGRATION_TESTS -d linux --name "$TEST_FILTER" --file-reporter "json:$RUNNER_TEMP/tests.json" || rc=$?
+          python3 ../../.github/scripts/tests_ran.py "$RUNNER_TEMP/tests.json" || {
+            grep -v '"type":"print"' "$RUNNER_TEMP/tests.json" | tail -n 60
+            exit 1
+          }
+          [ "$rc" -eq 0 ] || [ "$rc" -eq 79 ]
+      - if: always()
+        run: cat "$RUNNER_TEMP"/node_server*.log || true
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+      # MSVC 14.5x turns C++/WinRT's use of <experimental/coroutine> into
+      # error STL1011; this is the opt-out it names. cl.exe reads CL itself.
+      # -D rather than /D: Git Bash rewrites a leading / as a path.
+      CL: -D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/pub-overrides
+      # The address of the adapter carrying the default route, not the first
+      # one listed (which can be a Hyper-V virtual switch). Connecting a UDP
+      # socket sends nothing; it only picks the route. Get-NetIPConfiguration
+      # throws on some runner images.
+      - run: |
+          ip=$(python -c "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(('1.1.1.1', 80)); print(s.getsockname()[0])")
+          echo "NODE_SERVER_IP=$ip" >> "$GITHUB_ENV"
+      # A process started in one step does not outlive it here, so the
+      # integration step starts the server itself.
+      - uses: ./.github/actions/fixture-server
+        with:
+          node-server-ip: ${{ env.NODE_SERVER_IP }}
+          start: 'false'
+      # flutter is flutter.bat here, and cmd.exe parses its arguments twice
+      # (launching the batch file, then expanding %* inside it), so the | in
+      # the test-name regex has to arrive inside double quotes, which only a
+      # cmd step can guarantee.
+      - name: Integration tests
+        shell: cmd
+        working-directory: flutter_inappwebview/example
+        run: |
+          pushd ..\..\test_node_server
+          start "" /B node index.js > "%RUNNER_TEMP%\node_server.log" 2>&1
+          popd
+          node ..\..\.github\actions\fixture-server\wait.js || exit /b 1
+          call flutter pub get || exit /b 1
+          call flutter test %INTEGRATION_TESTS% -d windows --name "%TEST_FILTER%" --file-reporter "json:%RUNNER_TEMP%\tests.json" || exit /b 1
+          python ..\..\.github\scripts\tests_ran.py "%RUNNER_TEMP%\tests.json" || exit /b 1
+      - if: always()
+        run: cat "$RUNNER_TEMP"/node_server*.log || true
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/pub-overrides
+      # 10.0.2.2 is the emulator's alias for the host.
+      - uses: ./.github/actions/fixture-server
+        with:
+          node-server-ip: 10.0.2.2
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The example's 1.5 GB Gradle heap runs out while jetifying the engine jar.
+      - run: sed -i 's/-Xmx1536M/-Xmx4G/' flutter_inappwebview/example/android/gradle.properties
+      - name: Integration tests on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          # API 34's System WebView (113) has no MULTI_PROFILE, so
+          # containerId would fall back to the default profile.
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          working-directory: flutter_inappwebview/example
+          script: |
+            flutter pub get
+            flutter test $INTEGRATION_TESTS -d emulator-5554 --name "$TEST_FILTER" --file-reporter "json:$RUNNER_TEMP/tests.json"
+            python3 ../../.github/scripts/tests_ran.py "$RUNNER_TEMP/tests.json"
+      - if: always()
+        run: cat "$RUNNER_TEMP"/node_server*.log || true
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: ./.github/actions/pub-overrides
+      - run: echo "NODE_SERVER_IP=$(hostname -I | awk '{print $1}')" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/fixture-server
+        with:
+          node-server-ip: ${{ env.NODE_SERVER_IP }}
+      # Chrome for Testing with its matching chromedriver; the runner's
+      # preinstalled Chrome lags the driver setup-chrome picks.
+      - id: chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+      - run: echo "CHROME_EXECUTABLE=${{ steps.chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
+      - run: nohup "${{ steps.chrome.outputs.chromedriver-path }}" --port=4444 > "$RUNNER_TEMP/chromedriver.log" 2>&1 &
+      # Web supports neither proxySettings, containerId nor ProxyController,
+      # so the proxy suite skips itself here: this job proves the example
+      # builds and the harness runs on web. `flutter drive` has no --name
+      # filter and compiles the target's directory as the app root, so it
+      # gets a small entrypoint next to webview_flutter_test.dart.
+      - name: Integration tests
+        working-directory: flutter_inappwebview/example
+        run: |
+          cat > integration_test/proxy_controller_test.dart <<'EOF'
+          import 'package:integration_test/integration_test.dart';
+
+          import 'proxy_controller/main.dart' as proxy_controller_tests;
+
+          void main() {
+            IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+            proxy_controller_tests.main();
+          }
+          EOF
+          flutter pub get
+          flutter drive --driver=test_driver/integration_test.dart \
+            --target=integration_test/proxy_controller_test.dart \
+            -d web-server --browser-name=chrome --chrome-binary="$CHROME_EXECUTABLE"
+      - if: always()
+        run: cat "$RUNNER_TEMP"/node_server*.log "$RUNNER_TEMP"/chromedriver.log || true

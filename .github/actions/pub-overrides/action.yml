@@ -1,0 +1,26 @@
+name: Point packages at their local siblings
+description: >
+  The plugins take each other by version and the examples take some of them by
+  path, so pub sees one package arriving from two sources and refuses to solve.
+  Upstream has no melos to generate the overrides that fix that; this writes a
+  pubspec_overrides.yaml into every flutter_inappwebview* package and example.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        PY=$(command -v python3 || command -v python)
+        "$PY" - <<'PYEOF'
+        import pathlib, re
+        root = pathlib.Path.cwd()
+        name_of = lambda spec: re.search(r'^name:\s*(\S+)', spec.read_text(), re.M).group(1)
+        pkgs = {name_of(s): s.parent for s in sorted(root.glob('flutter_inappwebview*/pubspec.yaml'))}
+        targets = list(pkgs.values()) + [p / 'example' for p in pkgs.values()
+                                         if (p / 'example' / 'pubspec.yaml').exists()]
+        for t in targets:
+            own = name_of(t / 'pubspec.yaml')
+            body = 'dependency_overrides:\n' + ''.join(
+                f'  {n}:\n    path: {p.as_posix()}\n' for n, p in pkgs.items() if n != own)
+            (t / 'pubspec_overrides.yaml').write_text(body)
+            print(f'wrote {t.relative_to(root).as_posix()}/pubspec_overrides.yaml')
+        PYEOF
