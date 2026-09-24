@@ -12,21 +12,19 @@ void onReceivedHttpAuthRequest() {
         Completer<InAppWebViewController>();
     final Completer<void> pageLoaded = Completer<void>();
     final List<HttpAuthenticationChallenge> challenges = [];
+    final url = WebUri("http://${environment["NODE_SERVER_IP"]}:8081/");
 
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: InAppWebView(
           key: GlobalKey(),
-          initialUrlRequest: URLRequest(
-            url: WebUri("http://${environment["NODE_SERVER_IP"]}:8081/"),
-          ),
           initialSettings: InAppWebViewSettings(clearCache: true),
           onWebViewCreated: (controller) {
             controllerCompleter.complete(controller);
           },
-          onLoadStop: (controller, url) {
-            if (!pageLoaded.isCompleted) {
+          onLoadStop: (controller, loadedUrl) {
+            if (loadedUrl?.port == url.port && !pageLoaded.isCompleted) {
               pageLoaded.complete();
             }
           },
@@ -44,6 +42,9 @@ void onReceivedHttpAuthRequest() {
     );
 
     final InAppWebViewController controller = await controllerCompleter.future;
+    // Loaded once the controller exists rather than with initialUrlRequest, so
+    // that the first challenge cannot race the WebView's creation.
+    await controller.loadUrl(urlRequest: URLRequest(url: url));
     await pageLoaded.future;
 
     expect(challenges.length, 2);
