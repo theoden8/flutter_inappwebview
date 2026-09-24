@@ -10,6 +10,9 @@
 - `ProxyController.setProxyOverride` and `clearProxyOverride` also apply to container and incognito sessions, and with a `containerId` set or clear that container's proxy, the same setting as `InAppWebViewSettings.proxySettings`; a rule set with no usable proxy is refused
 - Proxy rule URLs without a scheme are treated as `http://`, as on Android, instead of leaving requests unproxied
 - `deleteContainer` also drops the proxy set for that container
+- Fixed `onReceivedHttpAuthRequest` never reaching the app: the challenge's `previousFailureCount` was `null`. It is now `0` for a first challenge and `1` for a retry, as WPE WebKit only reports whether a request is a retry
+- Fixed HTTP auth responses always cancelling the request: `HttpAuthResponseAction` had no Linux values, so `PROCEED` and `USE_SAVED_HTTP_AUTH_CREDENTIALS` were sent as `null` (fixed in flutter_inappwebview_platform_interface)
+- Fixed `onReceivedServerTrustAuthRequest` never reaching the app: `SslError.code` was sent as a string. It is now the `GTlsCertificateFlags` value that `SslErrorType` maps on Linux
 
 ## 0.1.0-beta.1
 
