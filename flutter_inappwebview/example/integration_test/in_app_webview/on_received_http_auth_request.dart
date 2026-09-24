@@ -49,10 +49,9 @@ void onReceivedHttpAuthRequest() {
     expect(challenges.length, 2);
     expect(challenges[0].protectionSpace.host, environment["NODE_SERVER_IP"]);
     expect(challenges[0].protectionSpace.realm, "Node");
-    expect(
-      challenges[1].previousFailureCount,
-      greaterThan(challenges[0].previousFailureCount),
-    );
+    // Platforms count differently (Windows resets the count on every
+    // navigation), but a retry always reports a previous failure.
+    expect(challenges[1].previousFailureCount, greaterThan(0));
 
     final String h1Content = await controller.evaluateJavascript(
       source: "document.body.querySelector('h1').textContent",
