@@ -14,7 +14,7 @@ on:
     inputs:
       test_filter:
         description: 'flutter test --name regex for the integration tests'
-        default: '[Pp]roxy|[Cc]ontainer'
+        default: 'onReceivedHttpAuthRequest|Http Auth Credential Database|SSL request'
   push:
     branches:
       - 'ci/**'
@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TEST_FILTER: ${{ github.event.inputs.test_filter || '[Pp]roxy|[Cc]ontainer' }}
+  TEST_FILTER: ${{ github.event.inputs.test_filter || 'onReceivedHttpAuthRequest|Http Auth Credential Database|SSL request' }}
   INTEGRATION_TESTS: integration_test/webview_flutter_test.dart
 
 jobs:
@@ -54,6 +54,9 @@ jobs:
             echo "::endgroup::"
           done
           exit $status
+      - name: Linux Dart unit tests
+        working-directory: flutter_inappwebview_linux
+        run: flutter test
 
   macos:
     runs-on: macos-15
