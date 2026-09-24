@@ -102,6 +102,7 @@
 - Implemented `PlatformContainerController`, `InAppWebViewSettings.containerId` and `InAppWebViewSettings.proxySettings` via `WebKitNetworkSession`
 - `ProxyController` overrides also apply to container sessions
 - Fixed `onReceivedHttpAuthRequest` and `onReceivedServerTrustAuthRequest` never reaching the app, and HTTP auth responses always cancelling the request
+- Fixed `ServerTrustAuthResponseAction.PROCEED` not retrying the load that failed the server trust check
 
 ## 6.2.0-beta.2
 
