@@ -83,6 +83,7 @@
 
 ### Linux
 - Initial implementation
+- Fixed `onReceivedHttpAuthRequest` and `onReceivedServerTrustAuthRequest` never reaching the app, and HTTP auth responses always cancelling the request
 
 ## 6.2.0-beta.2
 
