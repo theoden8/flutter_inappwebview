@@ -272,6 +272,52 @@ function startProxy(port, id) {
 const proxy = startProxy(8083, 'A');
 const proxyB = startProxy(8084, 'B');
 
+// SOCKS5 proxies with the same marker page. The tunnel ends here: after the
+// SOCKS handshake the socket goes to an HTTP server that answers as proxy
+// `id`, so a SOCKS load is as identifiable as an HTTP-proxy one and needs no
+// outside network. Keep-alive works as on any HTTP server, so a client can
+// pool the tunnel.
+function startSocksProxy(port, id) {
+  const pages = http.createServer((req, res) => {
+    console.log(`socks ${id} response`, req.url);
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`
+    <html>
+      <head>
+      </head>
+      <body>
+        <h1>Proxy Works</h1>
+        <p id="proxy">${id}</p>
+        <p id="url">${req.url}</p>
+        <p id="method">${req.method}</p>
+        <p id="headers">${JSON.stringify(req.headers)}</p>
+      </body>
+    </html>
+  `);
+  });
+  const socks = net.createServer((socket) => {
+    socket.on('error', () => {});
+    // Greeting: VER, NMETHODS, METHODS. Accept "no authentication".
+    socket.once('data', () => {
+      socket.write(Buffer.from([0x05, 0x00]));
+      // Request: VER, CMD, RSV, ATYP, DST.ADDR, DST.PORT. The destination is
+      // not dialled; the tunnel ends at this proxy.
+      socket.once('data', () => {
+        console.log(`socks ${id} connect request`);
+        socket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+        pages.emit('connection', socket);
+      });
+    });
+  });
+  socks.listen(port, null, () => {
+    console.log(`socks proxy ${id} listening on port ${port}`);
+  });
+  return socks;
+}
+
+const socksA = startSocksProxy(8085, 'A');
+const socksB = startSocksProxy(8086, 'B');
+
 process.on('uncaughtException', function (err) {
   console.error(err);
 });
