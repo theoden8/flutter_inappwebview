@@ -329,6 +329,50 @@ abstract class PlatformContainerController extends PlatformInterface {
     );
   }
 
+  // [WebSpace fork patch] per-container network session reset.
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.resetNetworkSession}
+  ///Drops the network session of the container named [containerId], so
+  ///the next WebView bound to it starts a session of its own: no pooled
+  ///connection, proxy binding or TLS session carries over. Cookies,
+  ///storage and the HTTP cache stay.
+  ///
+  ///Call it after a container's proxy changes and before the next WebView
+  ///is built on it, with every WebView bound to the container already
+  ///disposed. Apple applies a SOCKS proxy change to a live session in
+  ///place, so a connection the container opened on its old route can stay
+  ///pooled and carry requests after the change.
+  ///
+  ///Returns `true` once the old session is gone, or when the container had
+  ///none this process. Returns `false` when something still held the
+  ///container's store after a few seconds, typically a WebView bound to it
+  ///that was not released; the session is then unchanged.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        apiName: 'WKWebsiteDataStore(forIdentifier:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore',
+        available: '17.0',
+        note:
+            "Releases the plugin's cached store and waits for WebKit to destroy it; a store for the same identifier created afterwards gets a new network session.",
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebsiteDataStore(forIdentifier:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebsitedatastore',
+        available: '14.0',
+        note:
+            "Releases the plugin's cached store and waits for WebKit to destroy it; a store for the same identifier created afterwards gets a new network session.",
+      ),
+    ],
+  )
+  Future<bool> resetNetworkSession(String containerId) {
+    throw UnimplementedError(
+      'resetNetworkSession is not implemented on the current platform',
+    );
+  }
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   bool isClassSupported({TargetPlatform? platform}) =>
       params.isClassSupported(platform: platform);

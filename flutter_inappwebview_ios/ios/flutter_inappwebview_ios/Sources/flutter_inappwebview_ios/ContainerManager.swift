@@ -180,6 +180,11 @@ public class ContainerManager: ChannelDelegate {
                 result(false); return
             }
             clearContainerData(containerId, result: result)
+        case "resetNetworkSession":
+            guard let containerId = args?["containerId"] as? String, !containerId.isEmpty else {
+                result(false); return
+            }
+            resetNetworkSession(containerId, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -257,6 +262,60 @@ public class ContainerManager: ChannelDelegate {
         store.removeData(ofTypes: types, modifiedSince: .distantPast) {
             DispatchQueue.main.async { result(true) }
         }
+    }
+
+    // [WebSpace fork patch] How long resetNetworkSession waits for WebKit to let go of the
+    // container's store. A WKWebView closes its page and web process
+    // asynchronously after it is removed, so the store outlives it briefly.
+    static var networkSessionResetTimeout: TimeInterval = 5
+    private static let networkSessionResetPoll: TimeInterval = 0.05
+
+    // A container's store opens one network session and keeps it for as
+    // long as the store lives, which with this cache is the whole process.
+    // WebKit applies a SOCKS proxy change to that live session in place
+    // (NetworkSessionCocoa::setProxyConfigData adds it to the session's
+    // nw_context), so a connection opened on the old route can stay pooled
+    // and carry the next WebView's requests. Dropping the cache's hold lets
+    // WebKit destroy the store, and its session, once no WebView holds it
+    // either. The next getOrCreateDataStore then gets a store with a new
+    // session, which takes its first WebView's proxy before any connection
+    // opens. Cookies, storage and the HTTP cache are on disk under the
+    // identifier and carry over.
+    //
+    // true once the old store is gone (or there was none); false when
+    // something still held it at the deadline, typically a WebView bound to
+    // the container that was not released. The store is then cached again,
+    // as WebKit would hand the same one back anyway.
+    static func resetNetworkSession(
+        forContainer containerId: String, completion: @escaping (Bool) -> Void
+    ) {
+        let uuid = containerIdToUUID(containerId)
+        sharedStoresLock.lock()
+        weak var released = sharedStores.removeValue(forKey: uuid)
+        sharedStoresLock.unlock()
+        let deadline = Date().addingTimeInterval(networkSessionResetTimeout)
+        func check() {
+            guard let store = released else {
+                completion(true)
+                return
+            }
+            if Date() >= deadline {
+                sharedStoresLock.lock()
+                if sharedStores[uuid] == nil {
+                    sharedStores[uuid] = store
+                }
+                sharedStoresLock.unlock()
+                completion(false)
+                return
+            }
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + networkSessionResetPoll, execute: check)
+        }
+        check()
+    }
+
+    private func resetNetworkSession(_ containerId: String, result: @escaping FlutterResult) {
+        ContainerManager.resetNetworkSession(forContainer: containerId) { result($0) }
     }
 
     public override func dispose() {

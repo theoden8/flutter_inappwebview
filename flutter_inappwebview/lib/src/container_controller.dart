@@ -57,6 +57,12 @@ class ContainerController {
   Future<bool> clearContainerData(String containerId) =>
       platform.clearContainerData(containerId);
 
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.resetNetworkSession}
+  ///
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.resetNetworkSession.supported_platforms}
+  Future<bool> resetNetworkSession(String containerId) =>
+      platform.resetNetworkSession(containerId);
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   static bool isClassSupported({TargetPlatform? platform}) =>
       PlatformContainerController.static().isClassSupported(platform: platform);
