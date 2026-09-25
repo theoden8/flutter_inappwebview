@@ -13,6 +13,7 @@
 const express = require('express');
 const http = require('http');
 const net = require('net');
+const dgram = require('dgram');
 const https = require('https');
 const cors = require('cors');
 const auth = require('basic-auth');
@@ -222,6 +223,18 @@ app.get("/test-download-file", (req, res) => {
   res.end();
 })
 
+// What WebRTC sent where, for the WebRTC tests: every STUN binding request
+// the STUN server below received, and what the proxies were asked to carry.
+// A STUN request that did not come through a SOCKS UDP relay went out
+// directly, around whatever proxy the WebView had.
+let webrtcLog = { stun: [], socks: [], http: [] };
+const socksRelayPorts = new Set();
+app.get('/webrtc-log', (req, res) => res.json(webrtcLog));
+app.get('/webrtc-log/reset', (req, res) => {
+  webrtcLog = { stun: [], socks: [], http: [] };
+  res.json(webrtcLog);
+});
+
 app.listen(8082)
 
 // Proxy servers
@@ -249,7 +262,8 @@ function startProxy(port, id) {
   `);
   });
   proxy.on('connect', (req, clientSocket, head) => {
-    console.log(`proxy ${id} connect request`);
+    console.log(`proxy ${id} connect request`, req.url);
+    webrtcLog.http.push({ proxy: id, connect: req.url });
     // Terminate the tunnel at this same proxy so CONNECT loads also get the
     // marker page identifying which proxy handled them.
     const { port: originPort, hostname } = new URL(`http://127.0.0.1:${port}`);
@@ -300,10 +314,19 @@ function startSocksProxy(port, id) {
     // Greeting: VER, NMETHODS, METHODS. Accept "no authentication".
     socket.once('data', () => {
       socket.write(Buffer.from([0x05, 0x00]));
-      // Request: VER, CMD, RSV, ATYP, DST.ADDR, DST.PORT. The destination is
-      // not dialled; the tunnel ends at this proxy.
-      socket.once('data', () => {
-        console.log(`socks ${id} connect request`);
+      // Request: VER, CMD, RSV, ATYP, DST.ADDR, DST.PORT.
+      socket.once('data', (request) => {
+        const target = socksAddress(request, 3);
+        if (request[1] === 0x03) {
+          console.log(`socks ${id} udp associate request`, target && target.text);
+          webrtcLog.socks.push({ proxy: id, udpAssociate: target && target.text });
+          socksUdpRelay(socket, id);
+          return;
+        }
+        // CONNECT: the destination is not dialled; the tunnel ends at this
+        // proxy.
+        console.log(`socks ${id} connect request`, target && target.text);
+        webrtcLog.socks.push({ proxy: id, connect: target && target.text });
         socket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
         pages.emit('connection', socket);
       });
@@ -315,8 +338,102 @@ function startSocksProxy(port, id) {
   return socks;
 }
 
+// ATYP, ADDR, PORT at `offset`, as in a SOCKS5 request or UDP header.
+function socksAddress(buffer, offset) {
+  let host;
+  let end;
+  if (buffer[offset] === 0x01) {
+    host = [...buffer.subarray(offset + 1, offset + 5)].join('.');
+    end = offset + 5;
+  } else if (buffer[offset] === 0x03) {
+    const length = buffer[offset + 1];
+    host = buffer.subarray(offset + 2, offset + 2 + length).toString();
+    end = offset + 2 + length;
+  } else if (buffer[offset] === 0x04) {
+    host = buffer.subarray(offset + 1, offset + 17).toString('hex');
+    end = offset + 17;
+  } else {
+    return null;
+  }
+  if (buffer.length < end + 2) return null;
+  const port = buffer.readUInt16BE(end);
+  return { host, port, end: end + 2, text: `${host}:${port}` };
+}
+
+// UDP ASSOCIATE: relays the client's datagrams to where their SOCKS header
+// says, and the replies back, for as long as the control connection lives.
+function socksUdpRelay(socket, id) {
+  const relay = dgram.createSocket('udp4');
+  let client = null;
+  relay.on('error', () => {});
+  relay.on('message', (message, from) => {
+    if (client === null
+        || (from.address === client.address && from.port === client.port)) {
+      // From the client: RSV(2), FRAG, ATYP, DST.ADDR, DST.PORT, DATA.
+      if (message.length < 10 || message[2] !== 0) return;
+      const target = socksAddress(message, 3);
+      if (!target) return;
+      client = { address: from.address, port: from.port };
+      console.log(`socks ${id} udp relay to`, target.text);
+      webrtcLog.socks.push({ proxy: id, udpTo: target.text });
+      relay.send(message.subarray(target.end), target.port, target.host);
+      return;
+    }
+    const header = Buffer.alloc(10);
+    header[3] = 0x01;
+    from.address.split('.').forEach((b, i) => { header[4 + i] = Number(b); });
+    header.writeUInt16BE(from.port, 8);
+    relay.send(Buffer.concat([header, message]), client.port, client.address);
+  });
+  relay.bind(0, () => {
+    const port = relay.address().port;
+    socksRelayPorts.add(port);
+    // BND.ADDR is the address the client reached this proxy on.
+    const reply = Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+    socket.localAddress.replace('::ffff:', '').split('.')
+      .forEach((b, i) => { reply[4 + i] = Number(b); });
+    reply.writeUInt16BE(port, 8);
+    socket.write(reply);
+  });
+  socket.on('close', () => relay.close());
+}
+
 const socksA = startSocksProxy(8085, 'A');
 const socksB = startSocksProxy(8086, 'B');
+
+// STUN server (RFC 5389 Binding only) for the WebRTC tests. Answers with the
+// address it saw, and logs whether the request came through a SOCKS relay.
+function startStunServer(port) {
+  const server = dgram.createSocket('udp4');
+  server.on('error', (err) => console.error('stun', err));
+  server.on('message', (message, from) => {
+    if (message.length < 20 || message.readUInt16BE(0) !== 0x0001
+        || message.readUInt32BE(4) !== 0x2112A442) {
+      return;
+    }
+    const viaSocks = socksRelayPorts.has(from.port);
+    console.log(`stun binding request from ${from.address}:${from.port}`,
+        viaSocks ? '(socks relay)' : '(direct)');
+    webrtcLog.stun.push({ from: `${from.address}:${from.port}`, viaSocks });
+    // Binding success response with XOR-MAPPED-ADDRESS.
+    const attribute = Buffer.alloc(12);
+    attribute.writeUInt16BE(0x0020, 0);
+    attribute.writeUInt16BE(8, 2);
+    attribute[5] = 0x01;
+    attribute.writeUInt16BE(from.port ^ 0x2112, 6);
+    const cookie = [0x21, 0x12, 0xA4, 0x42];
+    from.address.split('.').forEach((b, i) => { attribute[8 + i] = Number(b) ^ cookie[i]; });
+    const header = Buffer.alloc(20);
+    header.writeUInt16BE(0x0101, 0);
+    header.writeUInt16BE(attribute.length, 2);
+    message.copy(header, 4, 4, 20);
+    server.send(Buffer.concat([header, attribute]), from.port, from.address);
+  });
+  server.bind(port, () => console.log(`stun server listening on udp port ${port}`));
+  return server;
+}
+
+const stun = startStunServer(3478);
 
 process.on('uncaughtException', function (err) {
   console.error(err);
