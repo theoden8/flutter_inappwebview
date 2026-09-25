@@ -75,7 +75,7 @@ public class ProxyManager: ChannelDelegate {
         perSiteProxyStores.remove(store)
         perSiteProxyLock.unlock()
         guard wasPinned else { return }
-        store.proxyConfigurations = activeProxyConfigurations ?? []
+        setProxyConfigurations(activeProxyConfigurations ?? [], on: store)
     }
 
     static func carriesPerSiteProxy(_ store: WKWebsiteDataStore) -> Bool {
@@ -93,7 +93,7 @@ public class ProxyManager: ChannelDelegate {
         if carriesPerSiteProxy(store) {
             return
         }
-        store.proxyConfigurations = proxyConfigurations
+        setProxyConfigurations(proxyConfigurations, on: store)
     }
 
     public func setProxyOverride(_ settings: ProxySettings) {
@@ -118,13 +118,43 @@ public class ProxyManager: ChannelDelegate {
     static func fanOutToFollowingStores(_ proxyConfigurations: [ProxyConfiguration]) {
         let defaultStore = WKWebsiteDataStore.default()
         if !carriesPerSiteProxy(defaultStore) {
-            defaultStore.proxyConfigurations = proxyConfigurations
+            setProxyConfigurations(proxyConfigurations, on: defaultStore)
         }
-        WKWebsiteDataStore.nonPersistent().proxyConfigurations = proxyConfigurations
+        setProxyConfigurations(proxyConfigurations, on: WKWebsiteDataStore.nonPersistent())
         for store in ContainerManager.allCachedDataStores()
         where !carriesPerSiteProxy(store) {
-            store.proxyConfigurations = proxyConfigurations
+            setProxyConfigurations(proxyConfigurations, on: store)
         }
+    }
+
+    // WebKit moves a live store to a new proxy in one of two ways
+    // (NetworkSessionCocoa::setProxyConfigData). Usually it swaps the proxy
+    // on the store's nw_context, and the connections the store already has
+    // open stay pooled on the old route: a WebView built on the store
+    // afterwards can load through a proxy the store no longer has. When a
+    // configuration needs the HTTP stack it rebuilds the store's
+    // NSURLSessions instead, which closes their connections. An Oblivious
+    // HTTP relay is such a configuration; scoped to a domain that never
+    // resolves, it proxies nothing.
+    private static let sessionRebuildConfiguration = ProxyConfiguration(
+        obliviousHTTPRelay: URL(string: "https://relay.invalid/")!,
+        relayResourcePath: "/",
+        gatewayKeyConfig: Data(),
+        matchDomains: ["session-rebuild.invalid"])
+
+    // Every proxy the plugin gives a store goes through here. A change of
+    // route passes through the rebuild configuration first, so the store
+    // drops the connections it opened on the old one. The same route again,
+    // as when another WebView joins the store, is set as is: rebuilding
+    // would cancel the loads of the WebViews already on it.
+    static func setProxyConfigurations(
+        _ proxyConfigurations: [ProxyConfiguration], on store: WKWebsiteDataStore
+    ) {
+        if String(reflecting: store.proxyConfigurations)
+            != String(reflecting: proxyConfigurations) {
+            store.proxyConfigurations = proxyConfigurations + [sessionRebuildConfiguration]
+        }
+        store.proxyConfigurations = proxyConfigurations
     }
 
     public override func dispose() {
