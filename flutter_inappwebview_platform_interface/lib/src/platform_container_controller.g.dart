@@ -125,6 +125,23 @@ enum PlatformContainerControllerMethod {
   ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
   ///{@endtemplate}
   hasContainer,
+
+  ///Can be used to check if the [PlatformContainerController.resetNetworkSession] method is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.resetNetworkSession.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 17.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore)):
+  ///    - Releases the plugin's cached store and waits for WebKit to destroy it; a store for the same identifier created afterwards gets a new network session.
+  ///- macOS WKWebView 14.0+ ([Official API - WKWebsiteDataStore(forIdentifier:)](https://developer.apple.com/documentation/webkit/wkwebsitedatastore)):
+  ///    - Releases the plugin's cached store and waits for WebKit to destroy it; a store for the same identifier created afterwards gets a new network session.
+  ///
+  ///**Parameters - Officially Supported Platforms/Implementations**:
+  ///- [containerId]: all platforms
+  ///
+  ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
+  ///{@endtemplate}
+  resetNetworkSession,
 }
 
 extension _PlatformContainerControllerMethodSupported
@@ -165,6 +182,12 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.iOS,
               TargetPlatform.macOS,
               TargetPlatform.linux,
+            ].contains(platform ?? defaultTargetPlatform);
+      case PlatformContainerControllerMethod.resetNetworkSession:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
             ].contains(platform ?? defaultTargetPlatform);
     }
   }
