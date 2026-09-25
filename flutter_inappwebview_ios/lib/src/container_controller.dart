@@ -100,6 +100,15 @@ class IOSContainerController extends PlatformContainerController
     return ok ?? false;
   }
 
+  // [WebSpace fork patch] per-container network session reset.
+  @override
+  Future<bool> resetNetworkSession(String containerId) async {
+    final ok = await channel?.invokeMethod<bool>('resetNetworkSession', {
+      'containerId': containerId,
+    });
+    return ok ?? false;
+  }
+
   @override
   void dispose() {
     // empty
