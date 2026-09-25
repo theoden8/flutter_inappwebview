@@ -272,8 +272,8 @@ public class ContainerManager: ChannelDelegate {
 
     // A container's store opens one network session and keeps it for as
     // long as the store lives, which with this cache is the whole process.
-    // WebKit applies a SOCKS proxy change to that live session in place
-    // (NetworkSessionCocoa::setProxyConfigData adds it to the session's
+    // WebKit applies a proxy change, HTTP or SOCKS, to that live session in
+    // place (NetworkSessionCocoa::setProxyConfigData adds it to the session's
     // nw_context), so a connection opened on the old route can stay pooled
     // and carry the next WebView's requests. Dropping the cache's hold lets
     // WebKit destroy the store, and its session, once no WebView holds it

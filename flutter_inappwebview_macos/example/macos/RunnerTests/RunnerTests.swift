@@ -92,10 +92,11 @@ class RunnerTests: XCTestCase {
   }
 
   // [WebSpace fork patch] A container's network session lives as long as its
-  // store, and WebKit applies a SOCKS proxy change to that live session in
-  // place, so connections opened on the old route stay pooled. The reset
-  // drops the store so the next one for the container starts a session of
-  // its own; a store WebKit handed back unchanged still has the old session.
+  // store, and WebKit applies a proxy change, HTTP or SOCKS, to that live
+  // session in place, so connections opened on the old route stay pooled.
+  // The reset drops the store so the next one for the container starts a
+  // session of its own; a store WebKit handed back unchanged still has the
+  // old session.
   @available(macOS 14.0, *)
   func testResetNetworkSessionWithNothingCachedIsImmediate() {
     let done = expectation(description: "reset answered")
@@ -108,7 +109,12 @@ class RunnerTests: XCTestCase {
 
   @available(macOS 14.0, *)
   func testResetNetworkSessionHandsOutAFreshStore() {
-    weak var old = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-reset")
+    // WKWebsiteDataStore(forIdentifier:) autoreleases the store it hands
+    // out; without a pool of its own that reference would outlive the reset.
+    weak var old: WKWebsiteDataStore?
+    autoreleasepool {
+      old = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-reset")
+    }
     XCTAssertNotNil(old)
     let done = expectation(description: "reset answered")
     ContainerManager.resetNetworkSession(forContainer: "runner-test-reset") { ok in

@@ -338,9 +338,9 @@ abstract class PlatformContainerController extends PlatformInterface {
   ///
   ///Call it after a container's proxy changes and before the next WebView
   ///is built on it, with every WebView bound to the container already
-  ///disposed. Apple applies a SOCKS proxy change to a live session in
-  ///place, so a connection the container opened on its old route can stay
-  ///pooled and carry requests after the change.
+  ///disposed. Apple applies a proxy change, HTTP or SOCKS, to a live
+  ///session in place, so a connection the container opened on its old
+  ///route can stay pooled and carry requests after the change.
   ///
   ///Returns `true` once the old session is gone, or when the container had
   ///none this process. Returns `false` when something still held the
