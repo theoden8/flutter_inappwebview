@@ -4,6 +4,7 @@
 - Implemented `InAppWebViewSettings.containerId` and `InAppWebViewSettings.proxySettings` on iOS 17+
 - `MyCookieManager` methods taking a `webViewId` use the cookie store of that WebView's container
 - `ProxyController.setProxyOverride` and `clearProxyOverride` also apply to container data stores; a rule set that is empty or does not fully convert is refused
+- Fixed a WebView loading through its data store's previous proxy after the store's proxy changed
 - Updated flutter_inappwebview_platform_interface version to ^1.4.0-beta.3
 - Implemented `saveState`, `restoreState` InAppWebViewController methods
 - Implemented `PlatformProxyController` class

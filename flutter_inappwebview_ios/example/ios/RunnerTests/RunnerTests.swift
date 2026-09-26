@@ -172,11 +172,11 @@ class RunnerTests: XCTestCase {
 
     ProxyManager.fanOutToFollowingStores([
       ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: 8083))
-    ])
+    ], key: "override")
     XCTAssertEqual(store.proxyConfigurations.count, 2,
                    "setting the override must not overwrite a pinned site's proxy")
 
-    ProxyManager.fanOutToFollowingStores([])
+    ProxyManager.fanOutToFollowingStores([], key: "")
     XCTAssertEqual(store.proxyConfigurations.count, 2,
                    "clearing the override must not clear a pinned site's proxy")
   }
@@ -189,13 +189,44 @@ class RunnerTests: XCTestCase {
 
     ProxyManager.fanOutToFollowingStores([
       ProxyConfiguration(httpCONNECTProxy: .hostPort(host: "127.0.0.1", port: 8083))
-    ])
+    ], key: "override")
     XCTAssertEqual(store.proxyConfigurations.count, 1,
                    "a store with no proxy of its own must take the override")
 
-    ProxyManager.fanOutToFollowingStores([])
+    ProxyManager.fanOutToFollowingStores([], key: "")
     XCTAssertTrue(store.proxyConfigurations.isEmpty,
                   "and must give it up when the override is cleared")
+  }
+
+  // A change of route passes through a configuration that makes WebKit
+  // rebuild the store's sessions. It is a means, not part of the route: the
+  // store ends up with exactly what it was given.
+  @available(iOS 17.0, *)
+  func testSetProxyConfigurationsLeavesOnlyTheRouteAskedFor() {
+    let store = ContainerManager.getOrCreateDataStore(forContainer: "runner-test-proxy-rebuild")
+    let socks = ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: 9050))
+
+    ProxyManager.setProxyConfigurations([socks], key: "socks", on: store)
+    XCTAssertEqual(store.proxyConfigurations.count, 1)
+    ProxyManager.setProxyConfigurations([socks], key: "socks", on: store)
+    XCTAssertEqual(store.proxyConfigurations.count, 1)
+    ProxyManager.setProxyConfigurations([], key: "", on: store)
+    XCTAssertTrue(store.proxyConfigurations.isEmpty)
+  }
+
+  // The key decides whether a store drops its connections, so it has to
+  // change with anything that changes the route, not only the endpoint.
+  @available(iOS 17.0, *)
+  func testProxySettingsKeyCoversTheWholeRule() {
+    func key(_ rule: [String: Any?]) -> String? {
+      ProxySettings.fromMap(map: ["proxyRules": [rule] as [[String: Any?]]])?.key
+    }
+    let base: [String: Any?] = ["url": "socks5://127.0.0.1:9050", "username": "a", "password": "p"]
+    XCTAssertEqual(key(base), key(["password": "p", "username": "a", "url": "socks5://127.0.0.1:9050"]))
+    XCTAssertNotEqual(key(base), key(base.merging(["username": "b"]) { $1 }),
+                      "a proxy can route by credentials")
+    XCTAssertNotEqual(key(base), key(base.merging(["matchDomains": ["example.com"]]) { $1 }))
+    XCTAssertNotEqual(key(base), key(base.merging(["url": "socks5://127.0.0.1:9051"]) { $1 }))
   }
 
   // A WebView that binds the store and names no proxy hands it back to

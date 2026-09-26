@@ -774,8 +774,9 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                     // session. And pinning would exempt the store from the
                     // process-wide override while applying nothing itself.
                     if let proxyConfigurations = proxy.toProxyConfigurations() {
-                        configuration.websiteDataStore.proxyConfigurations =
-                            proxyConfigurations
+                        ProxyManager.setProxyConfigurations(
+                            proxyConfigurations, key: proxy.key,
+                            on: configuration.websiteDataStore)
                         // Exempts this store from ProxyManager's process-wide
                         // fan-out, which would otherwise replace the proxy the
                         // site asked for with the global one, or clear it.
