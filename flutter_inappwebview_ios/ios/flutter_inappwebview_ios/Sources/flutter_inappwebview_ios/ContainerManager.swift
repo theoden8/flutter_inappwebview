@@ -134,12 +134,26 @@ public class ContainerManager: ChannelDelegate {
         }
     }
 
-    private static func evictDataStore(forContainer containerId: String) {
+    @discardableResult
+    private static func evictDataStore(forContainer containerId: String) -> WKWebsiteDataStore? {
         let uuid = containerIdToUUID(containerId)
         sharedStoresLock.lock()
-        sharedStores.removeValue(forKey: uuid)
+        let store = sharedStores.removeValue(forKey: uuid)
         sharedStoreIds.removeValue(forKey: uuid)
         sharedStoresLock.unlock()
+        return store
+    }
+
+    // Puts back a store deleteContainer evicted but could not delete, as a
+    // WebView still uses it: ProxyManager only reaches cached stores.
+    private static func recacheDataStore(_ store: WKWebsiteDataStore, forContainer containerId: String) {
+        let uuid = containerIdToUUID(containerId)
+        sharedStoresLock.lock()
+        defer { sharedStoresLock.unlock() }
+        if sharedStores[uuid] == nil {
+            sharedStores[uuid] = store
+            sharedStoreIds[uuid] = containerId
+        }
     }
 
     // Kept for backwards compatibility with the bind site that doesn't
@@ -217,7 +231,8 @@ public class ContainerManager: ChannelDelegate {
         // doesn't fix that race (callers needing a wipe while a
         // WebView is bound should use clearContainerData), but it
         // removes us as a reason for the silent no-op.
-        ContainerManager.evictDataStore(forContainer: containerId)
+        // Weak: holding the store would itself keep it in use.
+        weak var evicted = ContainerManager.evictDataStore(forContainer: containerId)
         let uuid = containerIdToUUID(containerId)
         WKWebsiteDataStore.remove(forIdentifier: uuid) { error in
             // Apple returns an error when the store doesn't exist or
@@ -225,12 +240,20 @@ public class ContainerManager: ChannelDelegate {
             // not delete" — true means we deleted, false means we
             // didn't.
             let deleted = (error == nil)
-            if deleted {
-                var map = ContainerManager.loadIdMap()
-                map.removeValue(forKey: containerId)
-                ContainerManager.saveIdMap(map)
+            DispatchQueue.main.async {
+                if deleted {
+                    var map = ContainerManager.loadIdMap()
+                    map.removeValue(forKey: containerId)
+                    ContainerManager.saveIdMap(map)
+                    // A deleted container takes its proxy with it: one
+                    // created again under the same id starts from the
+                    // app-wide proxy, like any new container.
+                    ProxyManager.setRoute(nil, forContainer: containerId)
+                } else if let store = evicted {
+                    ContainerManager.recacheDataStore(store, forContainer: containerId)
+                }
+                result(deleted)
             }
-            DispatchQueue.main.async { result(deleted) }
         }
     }
 

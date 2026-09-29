@@ -210,6 +210,48 @@ void proxyOverrideForContainer() {
     skip: containersSkip,
   );
 
+  skippableTestWidgets('deleting a container drops its proxy', (
+    WidgetTester tester,
+  ) async {
+    final container = fresh('delete');
+    final containerController = ContainerController.instance();
+    await proxyController.setProxyOverride(settings: a);
+    await proxyController.setProxyOverride(settings: b, containerId: container);
+    try {
+      final load = await open(
+        tester,
+        InAppWebViewSettings(containerId: container),
+      );
+      expect(await load(), 'B');
+      await close(tester);
+      // WebKit releases a disposed WebView's store asynchronously, and
+      // deleteContainer refuses a store still in use.
+      var deleted = false;
+      for (var i = 0; i < 20 && !deleted; i++) {
+        deleted = await containerController.deleteContainer(container);
+        if (!deleted) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+      expect(deleted, isTrue);
+      final again = await open(
+        tester,
+        InAppWebViewSettings(containerId: container),
+      );
+      expect(
+        await again(),
+        'A',
+        reason:
+            'a container created again under the same id starts from the '
+            'app-wide proxy',
+      );
+    } finally {
+      await close(tester);
+      await proxyController.clearProxyOverride(containerId: container);
+      await proxyController.clearProxyOverride();
+    }
+  }, skip: containersSkip || !ContainerController.isClassSupported());
+
   skippableTestWidgets('an incognito WebView follows the app-wide override', (
     WidgetTester tester,
   ) async {

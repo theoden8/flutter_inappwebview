@@ -6,6 +6,7 @@
 #include <system_error>
 
 #include "container_session_cache.h"
+#include "proxy_manager.h"
 #include "plugin_instance.h"
 #include "utils/flutter.h"
 #include "utils/log.h"
@@ -74,6 +75,12 @@ void ContainerManager::HandleMethodCall(FlMethodCall* method_call) {
     std::filesystem::remove_all(data_dir, ec1);
     std::filesystem::remove_all(cache_dir, ec2);
     bool deleted = (data_existed || cache_existed) && !ec1 && !ec2;
+    // A deleted container takes its proxy with it: one created again under
+    // the same id starts from the process-wide override, like any new
+    // container.
+    if (deleted) {
+      unpin_container_proxy(id);
+    }
     g_autoptr(FlValue) result = fl_value_new_bool(deleted);
     fl_method_call_respond_success(method_call, result, nullptr);
     return;

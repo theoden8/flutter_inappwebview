@@ -225,6 +225,11 @@ abstract class PlatformContainerController extends PlatformInterface {
   ///disposed WebView's data store asynchronously, so a delete right after
   ///dispose can still fail and is worth retrying. On Android it is any
   ///container used since the app started; see the platform note.
+  ///
+  ///A deleted container also loses the proxy set for it through
+  ///[PlatformProxyController.setProxyOverride] or
+  ///[InAppWebViewSettings.proxySettings]: one created again under the same
+  ///[containerId] starts from the app-wide proxy, like any new container.
   ///{@endtemplate}
   @SupportedPlatforms(
     platforms: [
@@ -249,7 +254,7 @@ abstract class PlatformContainerController extends PlatformInterface {
       ),
       LinuxPlatform(
         note:
-            "Recursively removes both `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/`. The container's data is gone after the next process restart; if any WebView is still attached to its `WebKitNetworkSession` the in-memory state of that session is unaffected — dispose those WebViews first.",
+            "Recursively removes both `<XDG_DATA_HOME>/flutter_inappwebview/containers/<id>/` and `<XDG_CACHE_HOME>/flutter_inappwebview/containers/<id>/`. The container's data is gone after the next process restart; if any WebView is still attached to its `WebKitNetworkSession` the in-memory state of that session is unaffected, except its proxy, which falls back to the app-wide one — dispose those WebViews first.",
       ),
     ],
   )
