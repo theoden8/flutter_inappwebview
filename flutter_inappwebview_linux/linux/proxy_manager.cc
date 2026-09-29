@@ -19,6 +19,19 @@ bool string_equals(const gchar* a, const char* b) {
   return strcmp(a, b) == 0;
 }
 
+// Incognito sessions and their own proxy, or none to follow the process-wide
+// override. Entries go when the session is finalized.
+std::unordered_map<WebKitNetworkSession*, std::optional<ProxySettings>>&
+private_sessions() {
+  static std::unordered_map<WebKitNetworkSession*, std::optional<ProxySettings>>
+      sessions;
+  return sessions;
+}
+
+void on_private_session_finalized(gpointer, GObject* session) {
+  private_sessions().erase(reinterpret_cast<WebKitNetworkSession*>(session));
+}
+
 // Sessions that setProxyOverride / clearProxyOverride should touch:
 // the default session plus every cached container session. Without
 // the fan-out, contained WebViews use a per-container session that
@@ -39,6 +52,12 @@ std::vector<WebKitNetworkSession*> sessions_to_apply_proxy_to() {
     if (entry.second == nullptr || entry.second == defaultSession) continue;
     if (pins.find(entry.first) != pins.end()) continue;
     sessions.push_back(entry.second);
+  }
+  // Incognito sessions that named no proxy of their own.
+  for (const auto& entry : private_sessions()) {
+    if (!entry.second.has_value()) {
+      sessions.push_back(entry.first);
+    }
   }
   return sessions;
 }
@@ -225,6 +244,10 @@ void ProxyManager::HandleMethodCall(FlMethodCall* method_call) {
   const gchar* method = fl_method_call_get_name(method_call);
   FlValue* args = fl_method_call_get_args(method_call);
 
+  // A containerId scopes the call to that container, the entry a WebView's
+  // proxySettings writes too. An empty one names no container.
+  std::string containerId = get_fl_map_value<std::string>(args, "containerId", "");
+
   if (string_equals(method, "setProxyOverride")) {
     FlValue* settingsMap = get_fl_map_value_raw(args, "settings");
     if (settingsMap == nullptr || fl_value_get_type(settingsMap) != FL_VALUE_TYPE_MAP) {
@@ -233,11 +256,19 @@ void ProxyManager::HandleMethodCall(FlMethodCall* method_call) {
     }
 
     ProxySettings settings(settingsMap);
-    setProxyOverride(settings);
+    if (containerId.empty()) {
+      setProxyOverride(settings);
+    } else {
+      pin_container_proxy(containerId, settings);
+    }
     fl_method_call_respond_success(method_call, fl_value_new_null(), nullptr);
 
   } else if (string_equals(method, "clearProxyOverride")) {
-    clearProxyOverride();
+    if (containerId.empty()) {
+      clearProxyOverride();
+    } else {
+      unpin_container_proxy(containerId);
+    }
     fl_method_call_respond_success(method_call, fl_value_new_null(), nullptr);
 
   } else {
@@ -315,23 +346,23 @@ std::unordered_map<std::string, ProxySettings>& container_proxy_pins() {
   return pins;
 }
 
-void pin_container_proxy(const std::string& id, const ProxySettings& settings) {
+bool pin_container_proxy(const std::string& id, const ProxySettings& settings) {
   if (id.empty()) {
-    return;
+    return false;
   }
   // A rule set with no usable proxy is not pinned: the pin would exempt the
   // container from the process-wide override while applying nothing itself.
   WebKitNetworkProxySettings* proxySettings = build_proxy_settings(settings);
   if (proxySettings == nullptr) {
-    return;
+    return false;
   }
   container_proxy_pins()[id] = settings;
 
-  // The session is usually created right after this, and
-  // apply_container_proxy will pick the pin up then. But a WebView joining a
-  // container that already exists -- a second WebView on the same site, or a
-  // site whose proxy the user just changed -- gets no new session, so the pin
-  // has to reach the live one here.
+  // The session may not exist yet, and apply_container_proxy picks the pin up
+  // when it is created. But a container that already has one -- a second
+  // WebView on the same site, or ProxyController changing the proxy of a
+  // container in use -- gets no new session, so the pin has to reach the
+  // live one here.
   auto& cache = container_session_cache();
   auto it = cache.find(id);
   if (it != cache.end() && it->second != nullptr) {
@@ -339,6 +370,7 @@ void pin_container_proxy(const std::string& id, const ProxySettings& settings) {
         it->second, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxySettings);
   }
   webkit_network_proxy_settings_free(proxySettings);
+  return true;
 }
 
 void unpin_container_proxy(const std::string& id) {
@@ -377,6 +409,31 @@ void apply_container_proxy(const std::string& id,
     return;
   }
   apply_active_proxy_override(session);
+}
+
+void bind_private_session(WebKitNetworkSession* session,
+                          const std::optional<ProxySettings>& own) {
+  if (session == nullptr) {
+    return;
+  }
+  std::optional<ProxySettings> usable;
+  if (own.has_value()) {
+    WebKitNetworkProxySettings* proxySettings = build_proxy_settings(own.value());
+    if (proxySettings != nullptr) {
+      webkit_network_proxy_settings_free(proxySettings);
+      usable = own;
+    }
+  }
+  auto& sessions = private_sessions();
+  if (sessions.find(session) == sessions.end()) {
+    g_object_weak_ref(G_OBJECT(session), on_private_session_finalized, nullptr);
+  }
+  sessions[session] = usable;
+  if (usable.has_value()) {
+    apply_proxy_to_session(session, usable.value());
+  } else {
+    apply_active_proxy_override(session);
+  }
 }
 
 }  // namespace flutter_inappwebview_plugin

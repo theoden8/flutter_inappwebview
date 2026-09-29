@@ -740,9 +740,11 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 // supplied AND the runtime supports identifier-based stores
                 // (iOS 17+). incognito wins — we don't materialize a
                 // persistent profile for an incognito WebView.
+                var boundContainerId: String? = nil
                 if !settings.incognito,
                    let containerId = settings.containerId, !containerId.isEmpty,
                    #available(iOS 17.0, *) {
+                    boundContainerId = containerId
                     // Get the WKWebsiteDataStore from
                     // ContainerManager's shared cache so this WebView,
                     // sibling WebViews in the same container, and any
@@ -755,37 +757,18 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                     configuration.websiteDataStore =
                         ContainerManager.getOrCreateDataStore(forContainer: containerId)
                 }
-                // Per-WebView proxy. Apple's
-                // `WKWebsiteDataStore.proxyConfigurations` is the only API
-                // that scopes a proxy to a single WKWebView, by attaching it
-                // to the view's data store. Attach it to whichever store this
-                // WebView ended up with — typically the per-WebView
-                // `WKWebsiteDataStore(forIdentifier:)` set above, so each
-                // profile genuinely uses its own proxy. On <iOS 17 this is a
-                // no-op and the WebView falls back to the system / global
-                // ProxyController override.
-                if let proxyMap = settings.proxySettings,
-                   #available(iOS 17.0, *),
-                   let proxy = ProxySettings.fromMap(map: proxyMap) {
-                    // A rule set with no usable rule leaves this store as it is,
-                    // proxy and pin alike. The empty array it would otherwise
-                    // produce is not a no-op: WKWebsiteDataStore routes it to
-                    // clearProxyConfigData, which strips the proxy off the live
-                    // session. And pinning would exempt the store from the
-                    // process-wide override while applying nothing itself.
-                    if let proxyConfigurations = proxy.toProxyConfigurations() {
-                        ProxyManager.setProxyConfigurations(
-                            proxyConfigurations, key: proxy.key,
-                            on: configuration.websiteDataStore)
-                        // Exempts this store from ProxyManager's process-wide
-                        // fan-out, which would otherwise replace the proxy the
-                        // site asked for with the global one, or clear it.
-                        ProxyManager.pinPerSiteProxy(to: configuration.websiteDataStore)
-                    } else {
-                        debugPrint("InAppWebView - proxySettings has no usable rule; leaving this store's proxy alone")
-                    }
-                } else if #available(iOS 17.0, *) {
-                    ProxyManager.releasePerSiteProxy(from: configuration.websiteDataStore)
+                // The store's proxy comes from ProxyManager's table, which
+                // ProxyController writes too. proxySettings is a write to it:
+                // to the container's entry, or to this WebView's own for an
+                // incognito store. Left unset it changes nothing, and the store
+                // still gets what the table resolves it to before the first
+                // request.
+                if #available(iOS 17.0, *) {
+                    ProxyManager.bind(
+                        store: configuration.websiteDataStore,
+                        containerId: boundContainerId,
+                        incognito: settings.incognito,
+                        proxySettings: settings.proxySettings.flatMap { ProxySettings.fromMap(map: $0) })
                 }
                 if !settings.applicationNameForUserAgent.isEmpty {
                     if let applicationNameForUserAgent = configuration.applicationNameForUserAgent {

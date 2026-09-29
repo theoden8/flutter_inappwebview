@@ -1,16 +1,14 @@
 part of 'main.dart';
 
 void perWebViewProxy() {
-  // `proxySettings` scopes a proxy to a single WebView on iOS 17+ / macOS 14+,
-  // where WKWebsiteDataStore.proxyConfigurations belongs to the WebView's data
-  // store. Linux scopes it to a container's network session instead, so a
-  // WebView without a containerId, like this one, ignores it there; the
-  // container test below covers Linux.
-  final shouldSkip =
-      !InAppWebViewSettings.isPropertySupported(
-        InAppWebViewSettingsProperty.proxySettings,
-      ) ||
-      defaultTargetPlatform == TargetPlatform.linux;
+  // A WebView's own proxy: an incognito WebView gets a private data store
+  // (WKWebsiteDataStore.nonPersistent() on Apple, an ephemeral
+  // WebKitNetworkSession on Linux), so its proxySettings reaches it alone.
+  // A WebView that is neither incognito nor in a container shares the
+  // default store, and its proxySettings is ignored.
+  final shouldSkip = !InAppWebViewSettings.isPropertySupported(
+    InAppWebViewSettingsProperty.proxySettings,
+  );
 
   // The test server's proxy (port 8083) answers *any* request with its own
   // "Proxy Works" page instead of forwarding, so the page that comes back is
@@ -18,7 +16,7 @@ void perWebViewProxy() {
   // if it is ignored we get whatever www.example.com serves, or nothing
   // offline. The destination must be a host this machine does not own: macOS
   // routes traffic for any of its own addresses over lo0 and never proxies it.
-  skippableTestWidgets('proxySettings routes a single WebView through the proxy', (
+  skippableTestWidgets('proxySettings routes an incognito WebView through the proxy', (
     WidgetTester tester,
   ) async {
     final controllerCompleter = Completer<InAppWebViewController>();
@@ -32,6 +30,7 @@ void perWebViewProxy() {
           initialUrlRequest: URLRequest(url: TEST_URL_HTTP_EXAMPLE),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
+            incognito: true,
             proxySettings: ProxySettings(
               proxyRules: [
                 ProxyRule(url: "${environment["NODE_SERVER_IP"]}:8083"),

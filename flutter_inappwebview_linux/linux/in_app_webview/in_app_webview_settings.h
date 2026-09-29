@@ -154,21 +154,14 @@ class InAppWebViewSettings {
   // network-session API isn't there).
   std::string containerId;
 
-  // === Per-site proxy ===
-  // The proxy this WebView's network session should use, overriding any
-  // process-wide override for that session alone. Bound at construction
-  // like `containerId`, because a session's proxy has to be in place before
-  // the first request leaves it.
-  //
-  // WPE applies proxies per `WebKitNetworkSession`
-  // (`webkit_network_session_set_proxy_settings`), and every container
-  // already owns one, so two containers can hold two different proxies at
-  // once.
-  //
-  // Only containers get one: a WebView with no containerId shares the
-  // default session, so pinning a proxy to it would change every other
-  // WebView on that session. Such a pin is ignored rather than applied
-  // process-wide.
+  // === Proxy ===
+  // With a containerId, the container's proxy: the same entry
+  // ProxyController.setProxyOverride(containerId:) writes, set at
+  // construction because a session's proxy has to be in place before the
+  // first request leaves it. With incognito, the proxy of this WebView's
+  // own ephemeral session. Otherwise ignored: the WebView shares the
+  // default session, and a proxy there would change every other WebView on
+  // it. Unset, it changes nothing.
   std::optional<ProxySettings> proxySettings;
 
   // === CORS allowlist ===

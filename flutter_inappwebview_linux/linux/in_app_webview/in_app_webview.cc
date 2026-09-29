@@ -699,6 +699,8 @@ void InAppWebView::InitWebView(const InAppWebViewCreationParams& params) {
   if (useIncognito) {
     networkSession = webkit_network_session_new_ephemeral();
     debugLog("InAppWebView: Creating WebView with ephemeral (incognito) network session");
+    // Its own proxySettings, or the process-wide override.
+    bind_private_session(networkSession, params.initialSettings->proxySettings);
   } else if (params.initialSettings &&
              !params.initialSettings->containerId.empty()) {
     // Container join: use a process-wide cached WebKitNetworkSession with
@@ -709,14 +711,10 @@ void InAppWebView::InitWebView(const InAppWebViewCreationParams& params) {
     // proxy has to be in place before the container's first request rather
     // than after it. WPE binds a proxy per session, so two containers hold
     // two different proxies at once.
+    // Naming no proxy leaves the container's as it is.
     if (params.initialSettings->proxySettings.has_value()) {
       pin_container_proxy(params.initialSettings->containerId,
                           params.initialSettings->proxySettings.value());
-    } else {
-      // Binding the container while naming no proxy hands it back to the
-      // process-wide override, so a site whose proxy was removed stops
-      // using the old one.
-      unpin_container_proxy(params.initialSettings->containerId);
     }
     networkSession = get_or_create_container_session(
         params.initialSettings->containerId);
@@ -889,6 +887,7 @@ void InAppWebView::InitWebView(const InAppWebViewCreationParams& params) {
     if (useIncognito) {
       networkSession = webkit_network_session_new_ephemeral();
       debugLog("InAppWebView: Creating WebView with ephemeral (incognito) network session");
+      bind_private_session(networkSession, params.initialSettings->proxySettings);
     } else if (params.initialSettings &&
                !params.initialSettings->containerId.empty()) {
       // Container join: see the WPEPlatform branch above for details,
@@ -896,10 +895,6 @@ void InAppWebView::InitWebView(const InAppWebViewCreationParams& params) {
       if (params.initialSettings->proxySettings.has_value()) {
         pin_container_proxy(params.initialSettings->containerId,
                             params.initialSettings->proxySettings.value());
-      } else {
-        // See the WPEPlatform branch above: naming no proxy hands the
-        // container back to the process-wide override.
-        unpin_container_proxy(params.initialSettings->containerId);
       }
       networkSession = get_or_create_container_session(
           params.initialSettings->containerId);

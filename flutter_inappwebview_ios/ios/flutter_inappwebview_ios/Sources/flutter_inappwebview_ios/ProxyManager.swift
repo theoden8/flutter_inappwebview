@@ -20,18 +20,19 @@ public class ProxyManager: ChannelDelegate {
 
     public override func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any]
+        // An empty containerId names no container, as in InAppWebViewSettings.
+        let containerId = (arguments?["containerId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         switch call.method {
         case "setProxyOverride":
             if let args = arguments?["settings"] as? [String:Any?],
                let settings = ProxySettings.fromMap(map: args) {
-                setProxyOverride(settings)
-                result(true)
+                result(setProxyOverride(settings, containerId: containerId))
             } else {
                 result(false)
             }
             break
         case "clearProxyOverride":
-            clearProxyOverride()
+            clearProxyOverride(containerId: containerId)
             result(true)
             break
         default:
@@ -40,95 +41,124 @@ public class ProxyManager: ChannelDelegate {
         }
     }
     
-    // The configurations the Dart side last asked for, or nil when no
-    // override is active. A container's WKWebsiteDataStore is created
-    // lazily -- the first time a WebView joins that container, which can be
-    // long after setProxyOverride ran -- and a fresh store carries no proxy,
-    // so the intent has to outlive the list of stores it was applied to.
-    static var activeProxyConfigurations: [ProxyConfiguration]? = nil
-    // ProxySettings.key of the active override, "" when there is none.
-    static var activeProxyKey = ""
-
-    // Stores a WebView pinned with a proxy of its own. The process-wide
-    // override is the fallback for sites that named no proxy, so it must not
-    // reach these: setting it would replace the site's proxy with the global
-    // one, and clearing it would remove the site's proxy. Assigning an empty
-    // array is the only call in this stack that reaches WebKit's
-    // clearProxyConfigData, which is what takes a proxy off a live session.
-    //
-    // Weak: a non-persistent store is transient, and a set of raw
-    // identifiers would pin a freed address that a later store can reuse.
-    private static let perSiteProxyStores = NSHashTable<WKWebsiteDataStore>.weakObjects()
-    private static let perSiteProxyLock = NSLock()
-
-    // Called by InAppWebView once it has assigned a per-WebView proxy.
-    static func pinPerSiteProxy(to store: WKWebsiteDataStore) {
-        perSiteProxyLock.lock()
-        defer { perSiteProxyLock.unlock() }
-        perSiteProxyStores.add(store)
+    // A proxy as the plugin hands it to a store: the configurations, and the
+    // key of the settings they were built from (ProxySettings.key).
+    struct ProxyRoute {
+        let configurations: [ProxyConfiguration]
+        let key: String
+        static let direct = ProxyRoute(configurations: [], key: "")
     }
 
-    // Called by InAppWebView when a WebView binds a store and names no
-    // proxy: the store goes back to following the process-wide override,
-    // which is what that site's effective proxy resolves to.
-    static func releasePerSiteProxy(from store: WKWebsiteDataStore) {
-        perSiteProxyLock.lock()
-        let wasPinned = perSiteProxyStores.contains(store)
-        perSiteProxyStores.remove(store)
-        perSiteProxyLock.unlock()
-        guard wasPinned else { return }
-        setProxyConfigurations(activeProxyConfigurations ?? [], key: activeProxyKey, on: store)
+    // Who uses which proxy: one app-wide entry, one per container, and one
+    // per incognito store that named its own. A store uses its own entry if
+    // it has one, else the app-wide one, else no proxy. ProxyController and
+    // InAppWebViewSettings.proxySettings both write here, and a store only
+    // ever gets what this resolves to, so the two cannot disagree. Entries
+    // last for the process; none of it is saved.
+    private static var globalRoute: ProxyRoute?
+    private static var containerRoutes: [String: ProxyRoute] = [:]
+    // Incognito stores (WKWebsiteDataStore.nonPersistent()) are one per
+    // WebView and have no id to address them by. Weak: they go with their
+    // WebView. The value is the store's own route, or none to follow the
+    // app-wide one.
+    private final class PrivateRoute {
+        let route: ProxyRoute?
+        init(_ route: ProxyRoute?) { self.route = route }
     }
+    private static let privateStores = NSMapTable<WKWebsiteDataStore, PrivateRoute>.weakToStrongObjects()
+    private static let routesLock = NSLock()
 
-    static func carriesPerSiteProxy(_ store: WKWebsiteDataStore) -> Bool {
-        perSiteProxyLock.lock()
-        defer { perSiteProxyLock.unlock() }
-        return perSiteProxyStores.contains(store)
-    }
-
-    // Replays the active override, if any, onto a store created after the
-    // fan-out below ran. Called by ContainerManager.getOrCreateDataStore.
-    static func applyActiveProxyOverride(to store: WKWebsiteDataStore) {
-        guard let proxyConfigurations = activeProxyConfigurations else {
-            return
+    static func route(forContainer containerId: String?) -> ProxyRoute {
+        routesLock.lock()
+        defer { routesLock.unlock() }
+        if let containerId = containerId, let own = containerRoutes[containerId] {
+            return own
         }
-        if carriesPerSiteProxy(store) {
-            return
-        }
-        setProxyConfigurations(proxyConfigurations, key: activeProxyKey, on: store)
+        return globalRoute ?? .direct
     }
 
-    public func setProxyOverride(_ settings: ProxySettings) {
-        guard let proxyConfigurations = settings.toProxyConfigurations() else {
+    // Sets (or, with nil, clears) the app-wide entry or a container's, and
+    // moves every live store it reaches, including the ones WebViews are
+    // open on.
+    static func setRoute(_ route: ProxyRoute?, forContainer containerId: String?) {
+        routesLock.lock()
+        if let containerId = containerId {
+            containerRoutes[containerId] = route
+        } else {
+            globalRoute = route
+        }
+        routesLock.unlock()
+        applyRoutes()
+    }
+
+    // Brings every store the plugin knows of in line with the table.
+    // setProxyConfigurations leaves a store already on its route alone, so
+    // only the stores whose route changed are touched.
+    static func applyRoutes() {
+        setProxyConfigurations(route(forContainer: nil), on: WKWebsiteDataStore.default())
+        for (containerId, store) in ContainerManager.allCachedDataStoresByContainer() {
+            setProxyConfigurations(route(forContainer: containerId), on: store)
+        }
+        routesLock.lock()
+        let incognito = (privateStores.keyEnumerator().allObjects as? [WKWebsiteDataStore] ?? [])
+            .map { ($0, privateStores.object(forKey: $0)?.route) }
+        routesLock.unlock()
+        for (store, own) in incognito {
+            setProxyConfigurations(own ?? route(forContainer: nil), on: store)
+        }
+    }
+
+    // A container's store is created lazily, when a WebView or
+    // ContainerController first needs it; it takes the container's route
+    // then. Called by ContainerManager.getOrCreateDataStore.
+    static func applyRoute(to store: WKWebsiteDataStore, forContainer containerId: String) {
+        setProxyConfigurations(route(forContainer: containerId), on: store)
+    }
+
+    // A WebView is about to be created on `store`. Its proxySettings, when
+    // it names a usable proxy, is the same write as ProxyController's: to
+    // its container's entry, or to its own for an incognito store. Unset,
+    // it changes nothing. Either way the store gets what the table resolves
+    // it to before the WebView's first request.
+    static func bind(
+        store: WKWebsiteDataStore, containerId: String?, incognito: Bool,
+        proxySettings: ProxySettings?
+    ) {
+        let own = proxySettings?.toProxyRoute()
+        if proxySettings != nil && own == nil {
+            debugPrint("ProxyManager - proxySettings has no usable rule; leaving the proxy alone")
+        }
+        if let containerId = containerId {
+            if let own = own {
+                setRoute(own, forContainer: containerId)
+            } else {
+                applyRoute(to: store, forContainer: containerId)
+            }
+        } else if incognito {
+            routesLock.lock()
+            privateStores.setObject(PrivateRoute(own), forKey: store)
+            routesLock.unlock()
+            setProxyConfigurations(own ?? route(forContainer: nil), on: store)
+        } else {
+            if own != nil {
+                debugPrint("ProxyManager - proxySettings needs a containerId or incognito; ignored")
+            }
+            setProxyConfigurations(route(forContainer: nil), on: store)
+        }
+    }
+
+    @discardableResult
+    public func setProxyOverride(_ settings: ProxySettings, containerId: String? = nil) -> Bool {
+        guard let route = settings.toProxyRoute() else {
             debugPrint("ProxyManager - refusing a proxy override with no usable rule; leaving the current proxy alone")
-            return
+            return false
         }
-        // Remembered before anything is applied: a container joined later
-        // replays it rather than coming up with no proxy at all.
-        ProxyManager.activeProxyConfigurations = proxyConfigurations
-        ProxyManager.activeProxyKey = settings.key
-        ProxyManager.fanOutToFollowingStores(proxyConfigurations, key: settings.key)
+        ProxyManager.setRoute(route, forContainer: containerId)
+        return true
     }
 
-    public func clearProxyOverride() {
-        ProxyManager.activeProxyConfigurations = nil
-        ProxyManager.activeProxyKey = ""
-        ProxyManager.fanOutToFollowingStores([], key: "")
-    }
-
-    // Every store that follows the process-wide override, which is all of
-    // them but the ones a WebView pinned. A container store is neither the
-    // default nor the non-persistent one, so it has to be reached explicitly.
-    static func fanOutToFollowingStores(_ proxyConfigurations: [ProxyConfiguration], key: String) {
-        let defaultStore = WKWebsiteDataStore.default()
-        if !carriesPerSiteProxy(defaultStore) {
-            setProxyConfigurations(proxyConfigurations, key: key, on: defaultStore)
-        }
-        setProxyConfigurations(proxyConfigurations, key: key, on: WKWebsiteDataStore.nonPersistent())
-        for store in ContainerManager.allCachedDataStores()
-        where !carriesPerSiteProxy(store) {
-            setProxyConfigurations(proxyConfigurations, key: key, on: store)
-        }
+    public func clearProxyOverride(containerId: String? = nil) {
+        ProxyManager.setRoute(nil, forContainer: containerId)
     }
 
     // WebKit moves a live store to a new proxy in one of two ways
@@ -159,19 +189,18 @@ public class ProxyManager: ChannelDelegate {
     // it was built from ("" for none, which is also where a store starts).
     // A new key passes through the rebuild configuration first, so the
     // store drops the connections it opened on its old route. The same key
-    // again, as when another WebView joins the store, is set as is:
-    // rebuilding would cancel the loads of the WebViews already on it.
-    static func setProxyConfigurations(
-        _ proxyConfigurations: [ProxyConfiguration], key: String, on store: WKWebsiteDataStore
-    ) {
+    // again, as when another WebView joins the store, leaves the store as
+    // it is: rebuilding would cancel the loads of the WebViews already on it.
+    static func setProxyConfigurations(_ route: ProxyRoute, on store: WKWebsiteDataStore) {
         appliedProxyKeysLock.lock()
         let previousKey = appliedProxyKeys.object(forKey: store) as String? ?? ""
-        appliedProxyKeys.setObject(key as NSString, forKey: store)
+        appliedProxyKeys.setObject(route.key as NSString, forKey: store)
         appliedProxyKeysLock.unlock()
-        if key != previousKey {
-            store.proxyConfigurations = proxyConfigurations + [sessionRebuildConfiguration]
+        if route.key == previousKey {
+            return
         }
-        store.proxyConfigurations = proxyConfigurations
+        store.proxyConfigurations = route.configurations + [sessionRebuildConfiguration]
+        store.proxyConfigurations = route.configurations
     }
 
     public override func dispose() {
@@ -229,6 +258,13 @@ public class ProxySettings {
     // unparseable rule set would turn "use this proxy" into "stop using any
     // proxy" on a live session. clearProxyOverride is how a caller asks for
     // no proxy.
+    func toProxyRoute() -> ProxyManager.ProxyRoute? {
+        guard let proxyConfigurations = toProxyConfigurations() else {
+            return nil
+        }
+        return ProxyManager.ProxyRoute(configurations: proxyConfigurations, key: key)
+    }
+
     public func toProxyConfigurations() -> [ProxyConfiguration]? {
         if proxyRules.isEmpty {
             return nil

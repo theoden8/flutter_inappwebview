@@ -55,6 +55,7 @@ public class ContainerManager: ChannelDelegate {
     // confusion when remove(forIdentifier:) is called. Eviction is
     // explicit on deleteContainer.
     private static var sharedStores: [UUID: WKWebsiteDataStore] = [:]
+    private static var sharedStoreIds: [UUID: String] = [:]
     private static let sharedStoresLock = NSLock()
 
     // WebKit-init warm-up.
@@ -98,32 +99,33 @@ public class ContainerManager: ChannelDelegate {
             return cached
         }
         let store = WKWebsiteDataStore(forIdentifier: uuid)
-        // A store created after ProxyManager fanned an override out would
-        // otherwise carry no proxy: that fan-out only reaches the stores
-        // cached when it runs, and this one is created lazily on first join.
-        // Per-WebView `proxySettings` still wins -- preWKWebViewConfiguration
-        // assigns it to this same store after we return.
-        ProxyManager.applyActiveProxyOverride(to: store)
+        // ProxyManager's table may already name a proxy for this container,
+        // app-wide or its own, set before the store existed.
+        ProxyManager.applyRoute(to: store, forContainer: containerId)
         sharedStores[uuid] = store
+        sharedStoreIds[uuid] = containerId
         var map = loadIdMap()
         map[containerId] = uuid.uuidString
         saveIdMap(map)
         return store
     }
 
-    // Every container store currently cached, for ProxyManager's fan-out:
-    // setProxyOverride has to reach containers already joined, and
-    // applyActiveProxyOverride covers the ones joined afterwards.
-    static func allCachedDataStores() -> [WKWebsiteDataStore] {
+    // Every container store currently cached, with its containerId, for
+    // ProxyManager.applyRoutes: a proxy change has to reach containers
+    // already joined, and applyRoute covers the ones joined afterwards.
+    static func allCachedDataStoresByContainer() -> [(String, WKWebsiteDataStore)] {
         sharedStoresLock.lock()
         defer { sharedStoresLock.unlock() }
-        return Array(sharedStores.values)
+        return sharedStores.compactMap { uuid, store in
+            sharedStoreIds[uuid].map { ($0, store) }
+        }
     }
 
     private static func evictDataStore(forContainer containerId: String) {
         let uuid = containerIdToUUID(containerId)
         sharedStoresLock.lock()
         sharedStores.removeValue(forKey: uuid)
+        sharedStoreIds.removeValue(forKey: uuid)
         sharedStoresLock.unlock()
     }
 

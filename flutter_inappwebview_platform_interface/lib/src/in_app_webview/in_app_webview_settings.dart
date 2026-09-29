@@ -489,31 +489,26 @@ because there isn't any way to make the website data store non-persistent for th
   )
   String? containerId;
 
-  ///Per-WebView proxy configuration, scoped to the WebView's data store
-  ///rather than the process-wide default set via
-  ///[PlatformProxyController.setProxyOverride]. When [containerId] is also
-  ///set, the proxy is attached to that profile's data store, so each
-  ///profile can have its own proxy without affecting other WebViews.
+  ///The proxy of this WebView's container, or of this WebView alone when
+  ///[incognito] gives it a private data store.
   ///
-  ///On iOS 17+ / macOS 14+ this is attached to the WebView's data store via
-  ///[`WKWebsiteDataStore.proxyConfigurations`](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/4264546-proxyconfigurations).
-  ///On Linux it is attached to the container's
-  ///[`WebKitNetworkSession`](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.NetworkSession.html)
-  ///before that session is created, so the proxy is in place before the
-  ///container's first request, and a container carrying its own proxy is
-  ///left alone by [PlatformProxyController.setProxyOverride].
+  ///With [containerId], this is the same setting as
+  ///[PlatformProxyController.setProxyOverride] with that `containerId`, made
+  ///just before the WebView is created: it becomes the proxy of every WebView
+  ///in the container, those already open included, until another WebView of
+  ///the container sets one or [PlatformProxyController.clearProxyOverride]
+  ///clears it. A WebView that leaves this unset does not change its
+  ///container's proxy.
   ///
-  ///Every platform that honors this scopes the proxy to a storage session
-  ///rather than to a WebView, so a proxy is only really per-WebView when
-  ///[containerId] gives that WebView a session of its own. Without a
-  ///[containerId] the WebView shares the default session with every other
-  ///one, and on Linux such a value is ignored rather than applied to that
-  ///shared session.
+  ///With [incognito], it applies to this WebView's private data store only.
   ///
-  ///On older OS versions, and on Android / Windows / Web, the field is
-  ///ignored — there is no native API there to scope a proxy to a single
-  ///storage session. Use [PlatformProxyController.setProxyOverride] for a
-  ///process-wide proxy on those platforms.
+  ///Without either, the WebView shares the default data store with every
+  ///other such WebView, and this is ignored; use
+  ///[PlatformProxyController.setProxyOverride] without a `containerId` for
+  ///those.
+  ///
+  ///A rule set with no usable proxy is refused and leaves the current proxy
+  ///in place.
   @SupportedPlatforms(
     platforms: [
       IOSPlatform(
@@ -532,8 +527,7 @@ because there isn't any way to make the website data store non-persistent for th
         apiName: 'webkit_network_session_set_proxy_settings',
         apiUrl:
             'https://wpewebkit.org/reference/stable/wpe-webkit-2.0/method.NetworkSession.set_proxy_settings.html',
-        note:
-            "Requires WPE WebKit 2.40+ and a containerId: WPE scopes a proxy to a WebKitNetworkSession and only a container owns one, so a WebView without a containerId shares the default session and its value is ignored rather than applied there. A container with its own proxy is excluded from PlatformProxyController.setProxyOverride's fan-out.",
+        note: 'Requires WPE WebKit 2.40+.',
       ),
     ],
   )

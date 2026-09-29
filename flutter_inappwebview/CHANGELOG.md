@@ -2,6 +2,7 @@
 
 - Added `ContainerController` for enumerating, clearing and deleting named storage containers
 - Added `containerId` and `proxySettings` properties to `InAppWebViewSettings`
+- Added a `containerId` parameter to `ProxyController.setProxyOverride` and `clearProxyOverride`, the same per-container proxy `InAppWebViewSettings.proxySettings` sets
 - Added Linux support
 - Updated dependencies to the latest versions for all platform implementations:
   - `flutter_inappwebview_platform_interface`: `^1.4.0-beta.2` -> `^1.4.0-beta.3`
