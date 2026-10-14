@@ -16,6 +16,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # nlohmann/json version for JSON parsing
 set(NLOHMANN_JSON_VERSION "3.11.3")
+set(NLOHMANN_JSON_SHA256 "d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d")
 
 # === WPE WebKit Backend ===
 # This plugin uses WPE WebKit for offscreen web rendering.
@@ -154,18 +155,26 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
 endif()
 
 # === nlohmann/json dependency for JSON parsing ===
-include(FetchContent)
-FetchContent_Declare(
-  nlohmann_json
-  URL https://github.com/nlohmann/json/releases/download/v${NLOHMANN_JSON_VERSION}/json.tar.xz
-  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-)
-# Don't build tests/examples
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-FetchContent_MakeAvailable(nlohmann_json)
+# An installed copy (a distro package, a flatpak module) wins, so a build
+# without network access never reaches FetchContent.
+find_package(nlohmann_json ${NLOHMANN_JSON_VERSION} QUIET)
+if(nlohmann_json_FOUND)
+  message(STATUS "flutter_inappwebview_linux: nlohmann/json ${nlohmann_json_VERSION} (installed)")
+else()
+  include(FetchContent)
+  FetchContent_Declare(
+    nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v${NLOHMANN_JSON_VERSION}/json.tar.xz
+    URL_HASH SHA256=${NLOHMANN_JSON_SHA256}
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  # Don't build tests/examples
+  set(JSON_BuildTests OFF CACHE INTERNAL "")
+  FetchContent_MakeAvailable(nlohmann_json)
+  message(STATUS "flutter_inappwebview_linux: nlohmann/json ${NLOHMANN_JSON_VERSION} (downloaded)")
+endif()
 # Suppress deprecated literal operator warnings from nlohmann_json
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-literal-operator")
-message(STATUS "flutter_inappwebview_linux: nlohmann/json ${NLOHMANN_JSON_VERSION} configured")
 
 # Plugin source files
 list(APPEND PLUGIN_SOURCES
