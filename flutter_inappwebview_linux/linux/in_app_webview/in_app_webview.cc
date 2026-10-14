@@ -82,6 +82,16 @@
 #include "../web_message/web_message_channel.h"
 #include "../web_message/web_message_listener.h"
 
+// WebKitFrameInfo arrived in WPE 2.56 (WebKit PR 69204). Declared weak so a
+// build against older headers still links, loads on an older WPE, and uses the
+// API once the WPE it runs on has it.
+extern "C" {
+typedef struct _WebKitFrameInfo WebKitFrameInfo;
+__attribute__((weak)) WebKitFrameInfo* webkit_navigation_action_get_target_frame_info(
+    WebKitNavigationAction* navigation);
+__attribute__((weak)) gboolean webkit_frame_info_is_main_frame(WebKitFrameInfo* info);
+}
+
 using json = nlohmann::json;
 
 // Forward declaration of InAppWebView for FileChooserContext
@@ -3983,11 +3993,18 @@ gboolean InAppWebView::OnDecidePolicy(WebKitWebView* web_view, WebKitPolicyDecis
       g_object_ref(decision);
       self->pending_policy_decisions_[decision_id] = decision;
 
-      // Best-effort main frame detection: frame name is usually null/empty for main frame.
       bool is_for_main_frame = true;
-      const gchar* frame_name = webkit_navigation_action_get_frame_name(nav_action);
-      if (frame_name != nullptr && frame_name[0] != '\0') {
-        is_for_main_frame = false;
+      if (webkit_navigation_action_get_target_frame_info && webkit_frame_info_is_main_frame) {
+        // A null target is a new window, itself a main frame.
+        WebKitFrameInfo* target = webkit_navigation_action_get_target_frame_info(nav_action);
+        is_for_main_frame = target == nullptr || webkit_frame_info_is_main_frame(target);
+      } else {
+        // Older WPE has no frame info. The frame name is the target name a link
+        // or window.open() gave, so it is also empty for an iframe's own load.
+        const gchar* frame_name = webkit_navigation_action_get_frame_name(nav_action);
+        if (frame_name != nullptr && frame_name[0] != '\0') {
+          is_for_main_frame = false;
+        }
       }
 
       // Create URLRequest
