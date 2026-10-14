@@ -25,6 +25,9 @@ public class InAppWebViewSettings: ISettings<InAppWebView> {
     var horizontalScrollBarEnabled = true
     var resourceCustomSchemes: [String] = []
     var contentBlockers: [[String: [String : Any]]] = []
+    // [WebSpace fork patch] Content rule lists the host app compiled into
+    // `WKContentRuleListStore.default()`, attached by identifier.
+    var contentRuleListIdentifiers: [String] = []
     var minimumFontSize = 0
     var useShouldInterceptAjaxRequest = false
     var useOnAjaxReadyStateChange = false

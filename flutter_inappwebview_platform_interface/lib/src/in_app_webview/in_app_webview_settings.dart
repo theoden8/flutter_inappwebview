@@ -323,6 +323,19 @@ class InAppWebViewSettings_ {
   @ExchangeableObjectProperty(deserializer: _deserializeContentBlockers)
   List<ContentBlocker>? contentBlockers;
 
+  ///Identifiers of content rule lists the app has already compiled into
+  ///`WKContentRuleListStore.default()`, attached to this WebView before its
+  ///first load. An identifier the store does not hold is skipped. Unlike
+  ///[contentBlockers], nothing is compiled per WebView, so a large rule set
+  ///costs one compile in total rather than one per WebView.
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(available: "11.0"),
+      MacOSPlatform(available: "10.13"),
+    ],
+  )
+  List<String>? contentRuleListIdentifiers;
+
   ///Sets the content mode that the WebView needs to use when loading and rendering a webpage. The default value is [UserPreferredContentMode.RECOMMENDED].
   @SupportedPlatforms(
     platforms: [
@@ -3464,6 +3477,7 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     this.horizontalScrollBarEnabled = true,
     this.resourceCustomSchemes = const [],
     this.contentBlockers = const [],
+    this.contentRuleListIdentifiers,
     this.preferredContentMode = UserPreferredContentMode_.RECOMMENDED,
     this.useShouldInterceptAjaxRequest,
     this.useOnAjaxReadyStateChange,

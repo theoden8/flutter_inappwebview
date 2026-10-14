@@ -1121,6 +1121,37 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
         }
     }
     
+    // [WebSpace fork patch] Attach the content rule lists the host app compiled
+    // into `WKContentRuleListStore.default()` under [identifiers], in that
+    // order, skipping any the store does not hold. [completion] runs on the
+    // main queue once every lookup has answered, at once when there are none.
+    @available(iOS 11.0, *)
+    public func attachContentRuleLists(identifiers: [String], completion: @escaping () -> Void) {
+        if identifiers.isEmpty {
+            completion()
+            return
+        }
+        let group = DispatchGroup()
+        var found: [String: WKContentRuleList] = [:]
+        for identifier in identifiers {
+            group.enter()
+            WKContentRuleListStore.default().lookUpContentRuleList(forIdentifier: identifier) { list, _ in
+                DispatchQueue.main.async {
+                    found[identifier] = list
+                    group.leave()
+                }
+            }
+        }
+        group.notify(queue: .main) {
+            for identifier in identifiers {
+                if let list = found[identifier] {
+                    self.configuration.userContentController.add(list)
+                }
+            }
+            completion()
+        }
+    }
+    
     func setSettings(newSettings: InAppWebViewSettings, newSettingsMap: [String: Any]) {
         
         // MUST be the first! In this way, all the settings that uses evaluateJavaScript can be applied/blocked!
@@ -1449,8 +1480,16 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
             }
         }
         
-        if #available(iOS 11.0, *), newSettingsMap["contentBlockers"] != nil {
+        // [WebSpace fork patch] Removing every rule list also drops the ones
+        // attached by identifier, so rebuild only when either set changes: the
+        // host sends an empty `contentBlockers` with every settings update.
+        let ruleListIdentifiersChanged = newSettingsMap["contentRuleListIdentifiers"] != nil
+            && settings?.contentRuleListIdentifiers != newSettings.contentRuleListIdentifiers
+        let contentBlockersChanged = newSettingsMap["contentBlockers"] != nil
+            && !(newSettings.contentBlockers.isEmpty && (settings?.contentBlockers.isEmpty ?? true))
+        if #available(iOS 11.0, *), ruleListIdentifiersChanged || contentBlockersChanged {
             configuration.userContentController.removeAllContentRuleLists()
+            attachContentRuleLists(identifiers: newSettings.contentRuleListIdentifiers) {}
             let contentBlockers = newSettings.contentBlockers
             if contentBlockers.count > 0 {
                 do {
