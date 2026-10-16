@@ -8,6 +8,7 @@
 #include "in_app_webview.h"
 
 #include "../container_session_cache.h"
+#include "../content_blocker/content_rule_list_store.h"
 #include "../proxy_manager.h"
 
 #include <dlfcn.h>
@@ -305,51 +306,31 @@ InAppWebView::InAppWebView(FlPluginRegistrar* registrar, FlBinaryMessenger* mess
 
   RegisterCustomSchemes();
 
-  // Apply content blockers if specified, then load initial content
-  // Content blockers must be compiled asynchronously
-  if (settings_ && settings_->contentBlockers != nullptr && content_blocker_handler_) {
-    // Store initial load params for callback
-    auto initialUrlRequest = params.initialUrlRequest;
-    auto initialData = params.initialData;
-    auto initialDataMimeType = params.initialDataMimeType;
-    auto initialDataEncoding = params.initialDataEncoding;
-    auto initialDataBaseUrl = params.initialDataBaseUrl;
-    auto initialFile = params.initialFile;
-
-    content_blocker_handler_->setContentBlockers(
-        settings_->contentBlockers,
-        [this, initialUrlRequest, initialData, initialDataMimeType, initialDataEncoding,
-         initialDataBaseUrl, initialFile](bool success) {
-          if (!success) {
-            debugLog("InAppWebView: Content blockers failed to apply, loading content anyway");
-          }
-
-          // Now load initial content
-          if (initialUrlRequest.has_value()) {
-            loadUrl(initialUrlRequest.value());
-          } else if (initialData.has_value()) {
-            std::string mimeType = initialDataMimeType.value_or("text/html");
-            std::string encoding = initialDataEncoding.value_or("UTF-8");
-            std::string baseUrl = initialDataBaseUrl.value_or("about:blank");
-            loadData(initialData.value(), mimeType, encoding, baseUrl);
-          } else if (initialFile.has_value()) {
-            loadFile(initialFile.value());
-          }
-        });
-  } else {
-    // No content blockers - load initial content immediately
-    if (params.initialUrlRequest.has_value()) {
-      auto& urlRequest = params.initialUrlRequest.value();
-      loadUrl(urlRequest);
-    } else if (params.initialData.has_value()) {
-      std::string mimeType = params.initialDataMimeType.value_or("text/html");
-      std::string encoding = params.initialDataEncoding.value_or("UTF-8");
-      std::string baseUrl = params.initialDataBaseUrl.value_or("about:blank");
-      loadData(params.initialData.value(), mimeType, encoding, baseUrl);
-    } else if (params.initialFile.has_value()) {
-      loadFile(params.initialFile.value());
-    }
-  }
+  // [WebSpace fork patch] Every filter goes in before the first load, so the
+  // page's first requests meet them: the stock content blockers, then the
+  // lists the host app compiled itself.
+  auto initialUrlRequest = params.initialUrlRequest;
+  auto initialData = params.initialData;
+  auto initialDataMimeType = params.initialDataMimeType;
+  auto initialDataEncoding = params.initialDataEncoding;
+  auto initialDataBaseUrl = params.initialDataBaseUrl;
+  auto initialFile = params.initialFile;
+  applyContentFilters(
+      settings_ ? settings_->contentBlockers : nullptr,
+      settings_ ? settings_->contentRuleListIdentifiers : std::vector<std::string>{},
+      [this, initialUrlRequest, initialData, initialDataMimeType, initialDataEncoding,
+       initialDataBaseUrl, initialFile]() {
+        if (initialUrlRequest.has_value()) {
+          loadUrl(initialUrlRequest.value());
+        } else if (initialData.has_value()) {
+          std::string mimeType = initialDataMimeType.value_or("text/html");
+          std::string encoding = initialDataEncoding.value_or("UTF-8");
+          std::string baseUrl = initialDataBaseUrl.value_or("about:blank");
+          loadData(initialData.value(), mimeType, encoding, baseUrl);
+        } else if (initialFile.has_value()) {
+          loadFile(initialFile.value());
+        }
+      });
 }
 
 void InAppWebView::AttachChannel(FlBinaryMessenger* messenger, int64_t channel_id) {
@@ -2772,6 +2753,96 @@ void InAppWebView::getContentWidth(std::function<void(int64_t)> callback) {
       });
 }
 
+// === Content filters ===
+
+void InAppWebView::applyContentFilters(FlValue* contentBlockers,
+                                       const std::vector<std::string>& identifiers,
+                                       std::function<void()> done) {
+  auto attach = [this, identifiers, done]() { attachContentRuleLists(identifiers, done); };
+  if (content_blocker_handler_ == nullptr) {
+    attach();
+    return;
+  }
+  content_blocker_handler_->setContentBlockers(contentBlockers, [attach](bool success) {
+    if (!success) {
+      debugLog("InAppWebView: Content blockers failed to apply");
+    }
+    attach();
+  });
+}
+
+namespace {
+
+struct RuleListAttach {
+  int64_t webview_id;
+  uint64_t generation;
+  std::vector<WebKitUserContentFilter*> found;
+  size_t pending;
+  std::function<void()> done;
+};
+
+struct RuleListLookup {
+  std::shared_ptr<RuleListAttach> attach;
+  size_t index;
+};
+
+}  // namespace
+
+void InAppWebView::attachContentRuleLists(const std::vector<std::string>& identifiers,
+                                          std::function<void()> done) {
+  const uint64_t generation = ++rule_list_generation_;
+  WebKitUserContentFilterStore* store = content_rule_list_store();
+  if (identifiers.empty() || store == nullptr) {
+    if (done) done();
+    return;
+  }
+  auto attach = std::make_shared<RuleListAttach>();
+  attach->webview_id = id_;
+  attach->generation = generation;
+  attach->found.assign(identifiers.size(), nullptr);
+  attach->pending = identifiers.size();
+  attach->done = std::move(done);
+  for (size_t i = 0; i < identifiers.size(); ++i) {
+    webkit_user_content_filter_store_load(
+        store, identifiers[i].c_str(), nullptr,
+        [](GObject* source, GAsyncResult* result, gpointer user_data) {
+          std::unique_ptr<RuleListLookup> lookup(static_cast<RuleListLookup*>(user_data));
+          auto attach = lookup->attach;
+          GError* error = nullptr;
+          attach->found[lookup->index] = webkit_user_content_filter_store_load_finish(
+              WEBKIT_USER_CONTENT_FILTER_STORE(source), result, &error);
+          if (error != nullptr) {
+            debugLog("InAppWebView: content rule list not attached: " +
+                     std::string(error->message));
+            g_error_free(error);
+          }
+          if (--attach->pending > 0) {
+            return;
+          }
+          InAppWebView* view = InAppWebView::FindById(attach->webview_id);
+          if (view != nullptr && view->webview_ != nullptr &&
+              view->rule_list_generation_ == attach->generation) {
+            WebKitUserContentManager* manager =
+                webkit_web_view_get_user_content_manager(view->webview_);
+            for (WebKitUserContentFilter* filter : attach->found) {
+              if (filter != nullptr) {
+                webkit_user_content_manager_add_filter(manager, filter);
+              }
+            }
+          }
+          for (WebKitUserContentFilter* filter : attach->found) {
+            if (filter != nullptr) {
+              webkit_user_content_filter_unref(filter);
+            }
+          }
+          if (view != nullptr && attach->done) {
+            attach->done();
+          }
+        },
+        new RuleListLookup{attach, i});
+  }
+}
+
 // === Settings ===
 
 FlValue* InAppWebView::getSettings() const {
@@ -2784,14 +2855,21 @@ FlValue* InAppWebView::getSettings() const {
 void InAppWebView::setSettings(const std::shared_ptr<InAppWebViewSettings> newSettings,
                                FlValue* newSettingsMap) {
   if (newSettings && webview_) {
-    // Check if contentBlockers changed
-    FlValue* newContentBlockers = newSettings->contentBlockers;
-
-    // Apply content blockers if they have been updated
-    if (content_blocker_handler_ != nullptr) {
-      // If new settings have contentBlockers, apply them
-      // This will replace any existing content blockers
-      content_blocker_handler_->setContentBlockers(newContentBlockers, nullptr);
+    // [WebSpace fork patch] Applying drops every filter, the ones attached by
+    // identifier too, so apply only when either set changes: the host sends
+    // an empty contentBlockers with every settings update.
+    auto isEmpty = [](FlValue* list) {
+      return list == nullptr || fl_value_get_length(list) == 0;
+    };
+    const bool identifiersChanged =
+        !settings_ ||
+        settings_->contentRuleListIdentifiers != newSettings->contentRuleListIdentifiers;
+    const bool blockersChanged =
+        !isEmpty(newSettings->contentBlockers) ||
+        (settings_ && !isEmpty(settings_->contentBlockers));
+    if (identifiersChanged || blockersChanged) {
+      applyContentFilters(newSettings->contentBlockers,
+                          newSettings->contentRuleListIdentifiers, nullptr);
     }
 
     settings_ = newSettings;

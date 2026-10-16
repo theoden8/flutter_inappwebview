@@ -323,15 +323,26 @@ class InAppWebViewSettings_ {
   @ExchangeableObjectProperty(deserializer: _deserializeContentBlockers)
   List<ContentBlocker>? contentBlockers;
 
-  ///Identifiers of content rule lists the app has already compiled into
-  ///`WKContentRuleListStore.default()`, attached to this WebView before its
-  ///first load. An identifier the store does not hold is skipped. Unlike
-  ///[contentBlockers], nothing is compiled per WebView, so a large rule set
-  ///costs one compile in total rather than one per WebView.
+  ///Identifiers of content rule lists the app has already compiled,
+  ///attached to this WebView before its first load. An identifier the store
+  ///does not hold is skipped. Unlike [contentBlockers], nothing is compiled
+  ///per WebView, so a large rule set costs one compile in total rather than
+  ///one per WebView.
+  ///
+  ///The store is `WKContentRuleListStore.default()` on iOS and macOS. WPE has
+  ///no default store, so on Linux it is the plugin's own, which the app
+  ///compiles into over the `com.pichillilorenzo/flutter_inappwebview_content_rule_list_store`
+  ///method channel: `identifiers`, `compile` (`identifier`, `json`) and
+  ///`remove` (`identifier`).
   @SupportedPlatforms(
     platforms: [
       IOSPlatform(available: "11.0"),
       MacOSPlatform(available: "10.13"),
+      LinuxPlatform(
+        apiName: "WebKitUserContentFilterStore",
+        apiUrl:
+            "https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.UserContentFilterStore.html",
+      ),
     ],
   )
   List<String>? contentRuleListIdentifiers;

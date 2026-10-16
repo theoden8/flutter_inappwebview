@@ -411,15 +411,22 @@ class InAppWebViewSettings {
   ///- Linux WPE WebKit ([Official API - WebKitUserContentFilter](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.UserContentFilter.html))
   List<ContentBlocker>? contentBlockers;
 
-  ///Identifiers of content rule lists the app has already compiled into
-  ///`WKContentRuleListStore.default()`, attached to this WebView before its
-  ///first load. An identifier the store does not hold is skipped. Unlike
-  ///[contentBlockers], nothing is compiled per WebView, so a large rule set
-  ///costs one compile in total rather than one per WebView.
+  ///Identifiers of content rule lists the app has already compiled,
+  ///attached to this WebView before its first load. An identifier the store
+  ///does not hold is skipped. Unlike [contentBlockers], nothing is compiled
+  ///per WebView, so a large rule set costs one compile in total rather than
+  ///one per WebView.
+  ///
+  ///The store is `WKContentRuleListStore.default()` on iOS and macOS. WPE has
+  ///no default store, so on Linux it is the plugin's own, which the app
+  ///compiles into over the `com.pichillilorenzo/flutter_inappwebview_content_rule_list_store`
+  ///method channel: `identifiers`, `compile` (`identifier`, `json`) and
+  ///`remove` (`identifier`).
   ///
   ///**Officially Supported Platforms/Implementations**:
   ///- iOS WKWebView 11.0+
   ///- macOS WKWebView 10.13+
+  ///- Linux WPE WebKit ([Official API - WebKitUserContentFilterStore](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.UserContentFilterStore.html))
   List<String>? contentRuleListIdentifiers;
 
   ///Configures how safe area insets are added to the adjusted content inset.
@@ -3620,6 +3627,7 @@ enum InAppWebViewSettingsProperty {
   ///**Officially Supported Platforms/Implementations**:
   ///- iOS WKWebView 11.0+
   ///- macOS WKWebView 10.13+
+  ///- Linux WPE WebKit ([Official API - WebKitUserContentFilterStore](https://wpewebkit.org/reference/stable/wpe-webkit-2.0/class.UserContentFilterStore.html))
   ///
   ///Use the [InAppWebViewSettings.isPropertySupported] method to check if this property is supported at runtime.
   ///{@endtemplate}
@@ -5832,6 +5840,7 @@ extension _InAppWebViewSettingsPropertySupported on InAppWebViewSettings {
             [
               TargetPlatform.iOS,
               TargetPlatform.macOS,
+              TargetPlatform.linux,
             ].contains(platform ?? defaultTargetPlatform);
       case InAppWebViewSettingsProperty.corsAllowlist:
         return ((kIsWeb && platform != null) || !kIsWeb) &&

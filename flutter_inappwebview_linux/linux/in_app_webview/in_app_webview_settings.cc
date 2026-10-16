@@ -231,6 +231,10 @@ InAppWebViewSettings::InAppWebViewSettings(FlValue* map) : InAppWebViewSettings(
       contentBlockers = fl_value_ref(blockers);
     }
   }
+  if (fl_map_contains_not_null(map, "contentRuleListIdentifiers")) {
+    contentRuleListIdentifiers = get_fl_map_value<std::vector<std::string>>(
+        map, "contentRuleListIdentifiers", {});
+  }
 }
 
 void InAppWebViewSettings::applyToWebView(WebKitWebView* webview) const {
@@ -609,6 +613,7 @@ FlValue* InAppWebViewSettings::toFlValue() const {
 
       // === CORS allowlist (handles std::optional automatically) ===
       {"corsAllowlist", make_fl_value(corsAllowlist)},
+      {"contentRuleListIdentifiers", make_fl_value(contentRuleListIdentifiers)},
 
       // === ITP ===
       {"itpEnabled", make_fl_value(itpEnabled)},

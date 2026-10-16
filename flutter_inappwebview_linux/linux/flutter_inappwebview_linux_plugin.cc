@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "container_manager.h"
+#include "content_blocker/content_rule_list_store.h"
 #include "cookie_manager.h"
 #include "credential_database.h"
 #include "headless_in_app_webview/headless_in_app_webview_manager.h"
@@ -40,6 +41,7 @@ struct _FlutterInappwebviewLinuxPlugin {
   std::unique_ptr<flutter_inappwebview_plugin::CredentialDatabase> credential_database;
   std::unique_ptr<flutter_inappwebview_plugin::ProxyManager> proxy_manager;
   std::unique_ptr<flutter_inappwebview_plugin::ContainerManager> container_manager;
+  std::unique_ptr<flutter_inappwebview_plugin::ContentRuleListStoreChannel> content_rule_list_store;
   std::unique_ptr<flutter_inappwebview_plugin::WebStorageManager> web_storage_manager;
   std::unique_ptr<flutter_inappwebview_plugin::WebViewEnvironment> webview_environment;
 };
@@ -58,6 +60,7 @@ static void flutter_inappwebview_linux_plugin_dispose(GObject* object) {
   self->credential_database.reset();
   self->proxy_manager.reset();
   self->container_manager.reset();
+  self->content_rule_list_store.reset();
   self->web_storage_manager.reset();
   self->webview_environment.reset();
   
@@ -116,6 +119,9 @@ void flutter_inappwebview_linux_plugin_register_with_registrar(FlPluginRegistrar
 
   plugin->container_manager = std::make_unique<flutter_inappwebview_plugin::ContainerManager>(pluginInstance);
   pluginInstance->containerManager = plugin->container_manager.get();
+
+  plugin->content_rule_list_store =
+      std::make_unique<flutter_inappwebview_plugin::ContentRuleListStoreChannel>(pluginInstance);
 
   plugin->web_storage_manager = std::make_unique<flutter_inappwebview_plugin::WebStorageManager>(pluginInstance);
   pluginInstance->webStorageManager = plugin->web_storage_manager.get();

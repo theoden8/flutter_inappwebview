@@ -180,6 +180,10 @@ class InAppWebViewSettings {
   // Each rule is a map with "trigger" and "action" keys
   FlValue* contentBlockers = nullptr;
 
+  // [WebSpace fork patch] Identifiers of filters the host app compiled into
+  // content_rule_list_store(), attached before the first load.
+  std::vector<std::string> contentRuleListIdentifiers;
+
   InAppWebViewSettings();
   explicit InAppWebViewSettings(FlValue* map);
   ~InAppWebViewSettings();

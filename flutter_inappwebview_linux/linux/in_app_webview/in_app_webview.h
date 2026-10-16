@@ -256,6 +256,13 @@ class InAppWebView {
   void setSettings(const std::shared_ptr<InAppWebViewSettings> newSettings,
                    FlValue* newSettingsMap = nullptr);
 
+  // [WebSpace fork patch] Attaches the filters the host app compiled into
+  // content_rule_list_store() under [identifiers], in that order, skipping any
+  // the store does not hold. A later call supersedes one still loading; [done]
+  // runs once every lookup has answered, unless this WebView is gone by then.
+  void attachContentRuleLists(const std::vector<std::string>& identifiers,
+                              std::function<void()> done);
+
   // User content controller
   UserContentController* userContentController() const { return user_content_controller_.get(); }
 
@@ -548,6 +555,16 @@ class InAppWebView {
 
   // Content blocker handler for Safari-style content blocking rules
   std::unique_ptr<ContentBlockerHandler> content_blocker_handler_;
+
+  // [WebSpace fork patch] Bumped by every attachContentRuleLists call, so a
+  // superseded one adds nothing when its lookups answer.
+  uint64_t rule_list_generation_ = 0;
+
+  // [WebSpace fork patch] The stock contentBlockers, which drop every filter
+  // first, then the lists attached by identifier; [done] runs once both are in.
+  void applyContentFilters(FlValue* contentBlockers,
+                           const std::vector<std::string>& identifiers,
+                           std::function<void()> done);
 
   // Web message channels (for WebMessageChannel support)
   std::map<std::string, std::unique_ptr<WebMessageChannel>> web_message_channels_;
