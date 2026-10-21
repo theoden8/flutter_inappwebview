@@ -691,21 +691,16 @@ class LinuxInAppWebViewController extends PlatformInAppWebViewController
           _inAppBrowserEventHandler!.onExitFullscreen();
         break;
       case "onReceivedIcon":
+        // [WebSpace fork patch] One page icon as PNG (WPE 2.54+), as Android
+        // sends it.
         if ((webviewParams != null && webviewParams!.onReceivedIcon != null) ||
             _inAppBrowserEventHandler != null) {
-          // For now, we just have the URL, not the actual icon data
-          // This could be enhanced to download the favicon
-          String? faviconUrl = call.arguments["url"];
-          if (faviconUrl != null) {
-            // Create a placeholder Uint8List since we don't have the actual icon
-            // The favicon URL could be used to download the icon if needed
+          final icon = call.arguments["icon"];
+          if (icon is Uint8List) {
             if (webviewParams != null && webviewParams!.onReceivedIcon != null)
-              webviewParams!.onReceivedIcon!(
-                _controllerFromPlatform,
-                Uint8List(0),
-              );
+              webviewParams!.onReceivedIcon!(_controllerFromPlatform, icon);
             else
-              _inAppBrowserEventHandler!.onReceivedIcon(Uint8List(0));
+              _inAppBrowserEventHandler!.onReceivedIcon(icon);
           }
         }
         break;

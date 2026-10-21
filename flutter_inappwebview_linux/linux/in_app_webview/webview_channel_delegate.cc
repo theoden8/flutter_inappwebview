@@ -1823,12 +1823,12 @@ void WebViewChannelDelegate::onExitFullscreen() const {
   invokeMethod("onExitFullscreen", args);
 }
 
-void WebViewChannelDelegate::onFaviconChanged(const std::optional<std::string>& faviconUrl) const {
+void WebViewChannelDelegate::onReceivedIcon(const std::vector<uint8_t>& icon) const {
   if (!channel_) {
     return;
   }
 
-  g_autoptr(FlValue) args = to_fl_map({{"url", make_fl_value(faviconUrl)}});
+  g_autoptr(FlValue) args = to_fl_map({{"icon", make_fl_value(icon)}});
 
   invokeMethod("onReceivedIcon", args);
 }

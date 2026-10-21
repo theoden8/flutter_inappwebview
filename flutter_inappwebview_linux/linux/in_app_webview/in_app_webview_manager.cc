@@ -225,6 +225,9 @@ void InAppWebViewManager::CreateInAppWebView(FlMethodCall* method_call) {
     }
   }
 
+  // [WebSpace fork patch] See InAppWebViewCreationParams::receivesIcons.
+  params.receivesIcons = get_fl_map_value<bool>(args, "receivesIcons", false);
+
   auto webViewEnvironmentIdOpt = get_optional_fl_map_value<std::string>(args, "webViewEnvironmentId");
   if (webViewEnvironmentIdOpt.has_value() && !webViewEnvironmentIdOpt->empty()) {
     WebViewEnvironment* webViewEnv = plugin_ ? plugin_->webViewEnvironment : nullptr;

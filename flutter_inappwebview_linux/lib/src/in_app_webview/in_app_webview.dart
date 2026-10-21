@@ -261,6 +261,9 @@ class LinuxInAppWebViewWidget extends PlatformInAppWebViewWidget {
             params.initialUserScripts?.map((e) => e.toMap()).toList() ?? [],
         'keepAliveId': params.keepAlive?.id,
         'webViewEnvironmentId': params.webViewEnvironment?.id,
+        // [WebSpace fork patch] WPE 2.54+ downloads the page's icons for a
+        // view that asks (InAppWebView::OnNotifyPageIcons).
+        'receivesIcons': params.onReceivedIcon != null,
       },
     );
   }

@@ -100,6 +100,9 @@ struct InAppWebViewCreationParams {
   WebKitWebView* relatedWebView = nullptr;  // For creating related WebViews (shares web process)
   std::vector<std::shared_ptr<UserScript>> initialUserScripts;  // User scripts to inject
   WebKitWebContext* webContext = nullptr;  // Custom WebKitWebContext from WebViewEnvironment
+  // [WebSpace fork patch] Whether Dart wired onReceivedIcon, so this view's
+  // session should download the page's icons.
+  bool receivesIcons = false;
 };
 
 // Pointer event kind (matches Dart side)
@@ -662,6 +665,9 @@ class InAppWebView {
   // Download signal handler ID
   gulong download_started_handler_id_ = 0;
 
+  // [WebSpace fork patch] InAppWebViewCreationParams::receivesIcons.
+  bool receives_icons_ = false;
+
   // Context menu state
   std::unique_ptr<ContextMenuPopup> context_menu_popup_;
   WebKitContextMenu* pending_context_menu_ = nullptr;
@@ -814,6 +820,11 @@ class InAppWebView {
   // === Media Capture State Signals ===
   static void OnNotifyCameraCaptureState(GObject* object, GParamSpec* pspec, gpointer user_data);
   static void OnNotifyMicrophoneCaptureState(GObject* object, GParamSpec* pspec, gpointer user_data);
+
+#if WEBKIT_CHECK_VERSION(2, 54, 0)
+  // [WebSpace fork patch] notify::page-icons, forwarded as onReceivedIcon.
+  static void OnNotifyPageIcons(GObject* object, GParamSpec* pspec, gpointer user_data);
+#endif
 
   // === Input helpers ===
   void SendWpePointerEvent(uint32_t type, double x, double y, uint32_t button);

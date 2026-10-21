@@ -274,7 +274,8 @@ class WebViewChannelDelegate : public ChannelDelegate {
 
   void onExitFullscreen() const;
 
-  void onFaviconChanged(const std::optional<std::string>& faviconUrl) const;
+  // [WebSpace fork patch] One page icon as PNG, as Android sends it.
+  void onReceivedIcon(const std::vector<uint8_t>& icon) const;
 
   void onRenderProcessGone(bool didCrash) const;
 

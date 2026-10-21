@@ -286,6 +286,8 @@ InAppWebView::InAppWebView(FlPluginRegistrar* registrar, FlBinaryMessenger* mess
     context_menu_config_ = params.contextMenu.value();
   }
 
+  receives_icons_ = params.receivesIcons;
+
   InitWpeBackend();
   InitWebView(params);
   RegisterEventHandlers();
@@ -1031,6 +1033,24 @@ void InAppWebView::RegisterEventHandlers() {
   // Available since WPE WebKit 2.34
   g_signal_connect(webview_, "notify::microphone-capture-state",
                    G_CALLBACK(OnNotifyMicrophoneCaptureState), this);
+
+#if WEBKIT_CHECK_VERSION(2, 54, 0)
+  // [WebSpace fork patch] WebKit downloads the icons a page declares through
+  // this view's network session, so with the session's cookies and proxy, and
+  // only while its website data manager has favicons on; an ephemeral one keeps
+  // them in memory. Each finished set is announced as notify::page-icons.
+  if (receives_icons_) {
+    WebKitNetworkSession* session = webkit_web_view_get_network_session(webview_);
+    if (session != nullptr) {
+      WebKitWebsiteDataManager* manager =
+          webkit_network_session_get_website_data_manager(session);
+      if (!webkit_website_data_manager_get_favicons_enabled(manager)) {
+        webkit_website_data_manager_set_favicons_enabled(manager, TRUE);
+      }
+    }
+    g_signal_connect(webview_, "notify::page-icons", G_CALLBACK(OnNotifyPageIcons), this);
+  }
+#endif
 
   webkit_web_view_add_frame_displayed_callback(
       webview_,
@@ -7214,6 +7234,65 @@ void InAppWebView::OnBackForwardListChanged(WebKitBackForwardList* list,
   }
 }
 
+// === Page Icon Signal Handler ===
+
+#if WEBKIT_CHECK_VERSION(2, 54, 0)
+namespace {
+// [WebSpace fork patch] A WebKitImage is premultiplied BGRA in native order,
+// cairo's ARGB32 on a little-endian host.
+std::optional<std::vector<uint8_t>> PageIconAsPng(WebKitImage* image) {
+  const int width = webkit_image_get_width(image);
+  const int height = webkit_image_get_height(image);
+  const guint stride = webkit_image_get_stride(image);
+  GBytes* bytes = webkit_image_as_bytes(image);
+  gsize size = 0;
+  const auto* data = static_cast<const unsigned char*>(g_bytes_get_data(bytes, &size));
+  if (width <= 0 || height <= 0 || data == nullptr ||
+      size < static_cast<gsize>(stride) * static_cast<gsize>(height)) {
+    return std::nullopt;
+  }
+  std::vector<unsigned char> pixels(data, data + static_cast<gsize>(stride) * height);
+  cairo_surface_t* surface = cairo_image_surface_create_for_data(
+      pixels.data(), CAIRO_FORMAT_ARGB32, width, height, static_cast<int>(stride));
+  if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(surface);
+    return std::nullopt;
+  }
+  std::vector<uint8_t> png;
+  cairo_status_t status = cairo_surface_write_to_png_stream(
+      surface,
+      [](void* closure, const unsigned char* chunk, unsigned int length) -> cairo_status_t {
+        auto* output = static_cast<std::vector<uint8_t>*>(closure);
+        output->insert(output->end(), chunk, chunk + length);
+        return CAIRO_STATUS_SUCCESS;
+      },
+      &png);
+  cairo_surface_destroy(surface);
+  if (status != CAIRO_STATUS_SUCCESS || png.empty()) {
+    return std::nullopt;
+  }
+  return png;
+}
+}  // namespace
+
+void InAppWebView::OnNotifyPageIcons(GObject* object, GParamSpec* pspec, gpointer user_data) {
+  auto* self = static_cast<InAppWebView*>(user_data);
+  if (!self || !self->channel_delegate_) {
+    return;
+  }
+  WebKitImageList* icons = webkit_web_view_get_page_icons(WEBKIT_WEB_VIEW(object));
+  if (icons == nullptr) {
+    return;
+  }
+  for (gsize i = 0; i < webkit_image_list_get_length(icons); i++) {
+    auto png = PageIconAsPng(webkit_image_list_get(icons, i));
+    if (png.has_value()) {
+      self->channel_delegate_->onReceivedIcon(png.value());
+    }
+  }
+}
+#endif
+
 // === Media Capture State Signal Handlers ===
 
 void InAppWebView::OnNotifyCameraCaptureState(GObject* object, GParamSpec* pspec,
@@ -7310,7 +7389,8 @@ void InAppWebView::OnDownloadStarted(WebKitNetworkSession* network_session,
 
 // NOTE: OnMotionNotify and OnNotifyFavicon have been removed because:
 // - motion-notify-event is a GTK widget signal (WPE WebView is NOT a GTK widget)
-// - notify::favicon property does not exist in WPE WebKit (GTK-only)
+// - notify::favicon property does not exist in WPE WebKit (GTK-only); WPE 2.54's
+//   notify::page-icons stands in for it (OnNotifyPageIcons)
 // Cursor detection in WPE is handled via mouse-target-changed and CursorDetectionJS plugin script.
 
 // === Cursor Detection ===
