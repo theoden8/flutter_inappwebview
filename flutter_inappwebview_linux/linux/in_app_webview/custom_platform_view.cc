@@ -139,14 +139,20 @@ CustomPlatformView::CustomPlatformView(FlBinaryMessenger* messenger,
   // Set up the webview's callback to mark frame available
   // For EGL texture, we also update the EGL image reference
   webview_->SetOnFrameAvailable([this]() {
-    // If using EGL texture, update the EGL image reference before marking available
+    // If using EGL texture, update the frame it binds before marking available
     if (egl_texture_ != nullptr && webview_ != nullptr) {
       uint32_t width = 0;
       uint32_t height = 0;
+#ifdef HAVE_WPE_PLATFORM
+      // Null when the frame came as pixels, which the texture then uploads
+      inappwebview_egl_texture_set_dmabuf(egl_texture_, webview_->GetCurrentDmaBuf(&width, &height),
+                                          width, height);
+#else
       void* egl_image = webview_->GetCurrentEglImage(&width, &height);
       if (egl_image != nullptr) {
         inappwebview_egl_texture_set_egl_image(egl_texture_, egl_image, width, height);
       }
+#endif
     }
     MarkTextureFrameAvailable();
   });

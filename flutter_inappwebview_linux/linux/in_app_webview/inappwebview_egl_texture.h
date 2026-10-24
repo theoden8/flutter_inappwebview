@@ -3,6 +3,10 @@
 
 #include <flutter_linux/flutter_linux.h>
 
+#ifdef HAVE_WPE_PLATFORM
+#include <wpe/wpe-platform.h>
+#endif
+
 G_BEGIN_DECLS
 
 /**
@@ -43,8 +47,24 @@ using WebViewType = InAppWebView;
 InAppWebViewEGLTexture* inappwebview_egl_texture_new(
     flutter_inappwebview_plugin::WebViewType* webview);
 
+#ifdef HAVE_WPE_PLATFORM
 /**
- * Updates the texture with a new EGL image.
+ * Updates the texture with the DMA-BUF WebKit rendered the current frame
+ * into, or none (nullptr) when the frame came as pixels.
+ *
+ * The texture keeps a reference and makes the EGLImage itself when Flutter
+ * populates it, on the display of Flutter's own context
+ * (BindDmaBufToCurrentTexture). Call on the main thread.
+ */
+void inappwebview_egl_texture_set_dmabuf(InAppWebViewEGLTexture* self,
+                                         WPEBuffer* buffer,
+                                         uint32_t width,
+                                         uint32_t height);
+#endif
+
+/**
+ * Updates the texture with a new EGL image (the legacy FDO backend, whose
+ * images are made on GDK's display).
  *
  * Call this from the WPE export callback when a new frame is available.
  * The texture will bind the EGL image to a GL texture without readback.

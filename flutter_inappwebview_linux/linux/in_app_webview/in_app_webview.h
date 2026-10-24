@@ -318,13 +318,32 @@ class InAppWebView {
   bool HasDmaBufExport() const;
   bool GetDmaBufFd(int* fd, uint32_t* stride, uint32_t* width, uint32_t* height) const;
 
-  // EGL image access (for zero-copy texture sharing with Flutter)
+  // EGL image access (legacy FDO backend, for zero-copy texture sharing with Flutter)
   // Returns the current EGL image handle (EGLImageKHR) and dimensions.
   // The EGL image is owned by WPE and remains valid until the next frame.
+  // WPEPlatform hands over the DMA-BUF instead (GetCurrentDmaBuf) and returns null here.
   void* GetCurrentEglImage(uint32_t* out_width, uint32_t* out_height) const;
+
+#ifdef HAVE_WPE_PLATFORM
+  // The DMA-BUF the current frame was rendered into, for a consumer that binds it
+  // in its own GL context (BindDmaBufToCurrentTexture), or null when the frame
+  // came as pixels. Borrowed: valid on the main thread until the next frame.
+  WPEBuffer* GetCurrentDmaBuf(uint32_t* out_width, uint32_t* out_height) const;
+
+  // Whether a consumer failed to import a frame. From then on this webview's
+  // DMA-BUF frames are copied to pixels on the CPU (WebKit still renders on the GPU).
+  bool ZeroCopyFailed() const { return zero_copy_failed_.load(); }
+
+  // A consumer could not bind a DMA-BUF frame; [reason] says why. Logged once,
+  // and the current frame is sent again as pixels so the view does not stay
+  // blank until WebKit renders another. Callable from any thread.
+  void ReportZeroCopyFailure(const std::string& reason);
+#endif
 
   // Skip pixel readback - when using zero-copy EGL texture mode, we don't need
   // to read pixels back to CPU. This improves performance and avoids GL context issues.
+  // On WPEPlatform it says the consumer binds DMA-BUF frames itself; otherwise
+  // they are copied to pixels.
   void SetSkipPixelReadback(bool skip) { skip_pixel_readback_ = skip; }
 
   // Frame available callback (called when new frame is ready)
@@ -493,7 +512,10 @@ class InAppWebView {
   
   // Buffer rendering for WPEPlatform
   WPEBuffer* current_buffer_ = nullptr;   // Current frame buffer (borrowed, not owned)
-  void* current_egl_image_ = nullptr;     // EGL image created from current buffer
+  bool current_buffer_zero_copy_ = false; // current_buffer_ is a DMA-BUF the consumer binds
+  std::atomic<bool> zero_copy_failed_{false};
+  // Cleared in the destructor; a frame resent from an idle callback checks it there.
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
   uint32_t current_buffer_width_ = 0;     // Width of current buffer
   uint32_t current_buffer_height_ = 0;    // Height of current buffer
   gulong buffer_rendered_handler_ = 0;    // Signal handler ID for buffer-rendered
@@ -705,6 +727,12 @@ class InAppWebView {
   // === WPEPlatform buffer rendering callback ===
   // Called when a new frame buffer is rendered by WPEView
   void OnWpePlatformBufferRendered(WPEBuffer* buffer);
+
+  // Copies [buffer]'s pixels into the pixel buffers. Call with wpe_buffer_mutex_ held.
+  bool ImportBufferPixels(WPEBuffer* buffer, uint32_t width, uint32_t height);
+
+  // Sends the current DMA-BUF frame again as pixels, after a failed import.
+  void ResendCurrentFrameAsPixels();
 #endif
 
   // DOM fullscreen request handler (called from WPE backend)

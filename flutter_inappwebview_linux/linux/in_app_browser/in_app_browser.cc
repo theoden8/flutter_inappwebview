@@ -5,6 +5,7 @@
 #include <epoxy/egl.h>
 
 #include "../plugin_instance.h"
+#include "../utils/egl_dmabuf.h"
 #include "../utils/flutter.h"
 #include "../utils/log.h"
 #include "../webview_environment.h"
@@ -446,6 +447,10 @@ void InAppBrowser::setupWebView(const InAppBrowserCreationParams& params) {
 
   // Create the InAppWebView - pass nullptr for registrar since we have messenger directly
   webView_ = std::make_shared<InAppWebView>(nullptr, messenger_, 0, webViewParams);
+#ifdef HAVE_WPE_PLATFORM
+  // The GL area binds DMA-BUF frames itself; the drawing area needs pixels
+  webView_->SetSkipPixelReadback(useGlRendering_);
+#endif
 
   // Attach channel with browser-specific ID
   webView_->AttachChannel(messenger_, METHOD_CHANNEL_NAME_PREFIX + id_, true);
@@ -1213,57 +1218,72 @@ gboolean InAppBrowser::OnGlAreaRender(GtkGLArea* area, GdkGLContext* context,
   
   glViewport(0, 0, fbWidth, fbHeight);
 
-  // Try to get EGL image for zero-copy rendering
+  // Zero-copy: bind the current frame as the GL texture
   uint32_t imgWidth = 0, imgHeight = 0;
-  void* eglImage = browser->webView_->GetCurrentEglImage(&imgWidth, &imgHeight);
-
-  if (eglImage != nullptr && imgWidth > 0 && imgHeight > 0) {
-    // Get the glEGLImageTargetTexture2DOES function
+  bool bound = false;
+  if (browser->glProgram_ != 0) {
+#ifdef HAVE_WPE_PLATFORM
+    // Made on the GL area's own display; a context that is not EGL (GLX on X11)
+    // cannot take it, and the frames then come as pixels
+    WPEBuffer* dmaBuf = browser->webView_->GetCurrentDmaBuf(&imgWidth, &imgHeight);
+    if (dmaBuf != nullptr && imgWidth > 0 && imgHeight > 0) {
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, browser->glTexture_);
+      std::string failure;
+      bound = BindDmaBufToCurrentTexture(dmaBuf, &failure);
+      if (!bound) {
+        glBindTexture(GL_TEXTURE_2D, 0);
+        browser->webView_->ReportZeroCopyFailure(failure);
+      }
+    }
+#else
+    void* eglImage = browser->webView_->GetCurrentEglImage(&imgWidth, &imgHeight);
     static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES =
         (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
-
-    if (glEGLImageTargetTexture2DOES != nullptr && browser->glProgram_ != 0) {
-      // Zero-copy path: bind EGL image directly as GL texture
+    if (eglImage != nullptr && imgWidth > 0 && imgHeight > 0 &&
+        glEGLImageTargetTexture2DOES != nullptr) {
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, browser->glTexture_);
       glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, static_cast<GLeglImageOES>(eglImage));
-
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-      // Use shader program for rendering
-      glUseProgram(browser->glProgram_);
-      glUniform1i(browser->glUniformTexture_, 0);
-
-      // Bind VBO and set up vertex attributes (non-interleaved layout)
-      glBindBuffer(GL_ARRAY_BUFFER, browser->glVBO_);
-
-      // Position attribute: 2 floats, stride 0 (tightly packed), offset 0
-      glVertexAttribPointer(browser->glAttribPosition_, 2, GL_FLOAT, GL_FALSE,
-                            0, (void*)0);
-      glEnableVertexAttribArray(browser->glAttribPosition_);
-
-      // Texture attribute: 2 floats, stride 0, offset = 4 positions * 2 floats = 8 floats
-      glVertexAttribPointer(browser->glAttribTexture_, 2, GL_FLOAT, GL_FALSE,
-                            0, (void*)(8 * sizeof(GLfloat)));
-      glEnableVertexAttribArray(browser->glAttribTexture_);
-
-      // Draw fullscreen quad as triangle strip
-      glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-
-
-      // Cleanup state
-      glDisableVertexAttribArray(browser->glAttribPosition_);
-      glDisableVertexAttribArray(browser->glAttribTexture_);
-      glBindBuffer(GL_ARRAY_BUFFER, 0);
-      glBindTexture(GL_TEXTURE_2D, 0);
-      glUseProgram(0);
-
-      return TRUE;
+      bound = true;
     }
+#endif
+  }
+
+  if (bound) {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Use shader program for rendering
+    glUseProgram(browser->glProgram_);
+    glUniform1i(browser->glUniformTexture_, 0);
+
+    // Bind VBO and set up vertex attributes (non-interleaved layout)
+    glBindBuffer(GL_ARRAY_BUFFER, browser->glVBO_);
+
+    // Position attribute: 2 floats, stride 0 (tightly packed), offset 0
+    glVertexAttribPointer(browser->glAttribPosition_, 2, GL_FLOAT, GL_FALSE,
+                          0, (void*)0);
+    glEnableVertexAttribArray(browser->glAttribPosition_);
+
+    // Texture attribute: 2 floats, stride 0, offset = 4 positions * 2 floats = 8 floats
+    glVertexAttribPointer(browser->glAttribTexture_, 2, GL_FLOAT, GL_FALSE,
+                          0, (void*)(8 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(browser->glAttribTexture_);
+
+    // Draw fullscreen quad as triangle strip
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // Cleanup state
+    glDisableVertexAttribArray(browser->glAttribPosition_);
+    glDisableVertexAttribArray(browser->glAttribTexture_);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+
+    return TRUE;
   }
 
   // Fallback: use pixel buffer rendering
