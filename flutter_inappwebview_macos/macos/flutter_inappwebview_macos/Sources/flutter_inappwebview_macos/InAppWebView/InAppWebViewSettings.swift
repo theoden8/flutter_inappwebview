@@ -68,6 +68,11 @@ public class InAppWebViewSettings: ISettings<InAppWebView> {
     var isTextInteractionEnabled = true
     var isSiteSpecificQuirksModeEnabled = true
     var upgradeKnownHostsToHTTPS = true
+    // [WebSpace fork patch] `WKWebpagePreferences.isLockdownModeEnabled`
+    // (macOS 13.0+). Nil leaves WebKit's default, which follows the
+    // system's Lockdown Mode, so a host that names no value never takes a
+    // page out of it.
+    var lockdownModeEnabled: Bool? = nil
     var isElementFullscreenEnabled = true
     var isInspectable = false
     var shouldPrintBackgrounds = false
@@ -90,6 +95,10 @@ public class InAppWebViewSettings: ISettings<InAppWebView> {
         if let alphaValue = settings["alpha"] as? Double {
             alpha = alphaValue
             settings.removeValue(forKey: "alpha")
+        }
+        if let lockdownModeValue = settings["lockdownModeEnabled"] as? Bool {
+            lockdownModeEnabled = lockdownModeValue
+            settings.removeValue(forKey: "lockdownModeEnabled")
         }
         // `proxySettings` is typed `[String: Any?]?`, which Objective-C cannot
         // represent, so @objcMembers never exposes it and super.parse, which asks
@@ -141,6 +150,9 @@ public class InAppWebViewSettings: ISettings<InAppWebView> {
             if #available(macOS 12.3, *) {
                 realSettings["isSiteSpecificQuirksModeEnabled"] = configuration.preferences.isSiteSpecificQuirksModeEnabled
                 realSettings["isElementFullscreenEnabled"] = configuration.preferences.isElementFullscreenEnabled
+            }
+            if #available(macOS 13.0, *) {
+                realSettings["lockdownModeEnabled"] = configuration.defaultWebpagePreferences.isLockdownModeEnabled
             }
             if #available(macOS 13.3, *) {
                 realSettings["isInspectable"] = webView.isInspectable

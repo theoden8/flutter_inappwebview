@@ -389,6 +389,12 @@ public class InAppWebView: WKWebView, WKUIDelegate,
             if #available(macOS 11.3, *) {
                 configuration.upgradeKnownHostsToHTTPS = settings.upgradeKnownHostsToHTTPS
             }
+            
+            // [WebSpace fork patch] Before construction, so the first
+            // page's WebContent process starts in the mode asked for.
+            if #available(macOS 13.0, *), let lockdownModeEnabled = settings.lockdownModeEnabled {
+                configuration.defaultWebpagePreferences.isLockdownModeEnabled = lockdownModeEnabled
+            }
         }
         
         return configuration
@@ -790,6 +796,11 @@ public class InAppWebView: WKWebView, WKUIDelegate,
             }
             if newSettingsMap["preferredContentMode"] != nil && settings?.preferredContentMode != newSettings.preferredContentMode {
                 configuration.defaultWebpagePreferences.preferredContentMode = WKWebpagePreferences.ContentMode(rawValue: newSettings.preferredContentMode)!
+            }
+            // [WebSpace fork patch] A fresh WKWebpagePreferences carries the
+            // system's choice, which nil goes back to.
+            if #available(macOS 13.0, *), newSettingsMap["lockdownModeEnabled"] != nil && settings?.lockdownModeEnabled != newSettings.lockdownModeEnabled {
+                configuration.defaultWebpagePreferences.isLockdownModeEnabled = newSettings.lockdownModeEnabled ?? WKWebpagePreferences().isLockdownModeEnabled
             }
         }
         
@@ -1276,6 +1287,13 @@ public class InAppWebView: WKWebView, WKUIDelegate,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  preferences: WKWebpagePreferences,
                  decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        // [WebSpace fork patch] Per navigation too: a window WebKit builds
+        // for `windowId` takes the opener's configuration, not
+        // `preWKWebViewConfiguration`, and a settings change reaches the
+        // next page here.
+        if #available(macOS 13.0, *), let lockdownModeEnabled = settings?.lockdownModeEnabled {
+            preferences.isLockdownModeEnabled = lockdownModeEnabled
+        }
         self.webView(webView, decidePolicyFor: navigationAction, decisionHandler: {(navigationActionPolicy) -> Void in
             decisionHandler(navigationActionPolicy, preferences)
         })

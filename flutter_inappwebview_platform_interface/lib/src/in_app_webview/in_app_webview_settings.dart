@@ -2255,6 +2255,31 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
   )
   bool? isFindInteractionEnabled;
 
+  ///Whether pages load in Lockdown Mode, which trades performance and
+  ///compatibility for security: JavaScript runs without JIT and some web
+  ///features are off. Set before the first load and on every main-frame
+  ///navigation, so a window the page opens takes it too.
+  ///
+  ///The default value is `null`, which follows the device's own Lockdown Mode
+  ///setting; `false` takes the pages out of it.
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        available: "16.0",
+        apiName: "WKWebpagePreferences.isLockdownModeEnabled",
+        apiUrl:
+            "https://developer.apple.com/documentation/webkit/wkwebpagepreferences/islockdownmodeenabled",
+      ),
+      MacOSPlatform(
+        available: "13.0",
+        apiName: "WKWebpagePreferences.isLockdownModeEnabled",
+        apiUrl:
+            "https://developer.apple.com/documentation/webkit/wkwebpagepreferences/islockdownmodeenabled",
+      ),
+    ],
+  )
+  bool? lockdownModeEnabled;
+
   ///Set minimum viewport inset to the smallest inset a webpage may experience in your app's maximally collapsed UI configuration.
   ///Values must be either zero or positive. It must be smaller than [maximumViewportInset].
   @SupportedPlatforms(
@@ -3613,6 +3638,7 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     this.upgradeKnownHostsToHTTPS = true,
     this.isElementFullscreenEnabled = true,
     this.isFindInteractionEnabled = false,
+    this.lockdownModeEnabled,
     this.minimumViewportInset,
     this.maximumViewportInset,
     this.isInspectable = false,
