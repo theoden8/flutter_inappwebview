@@ -104,7 +104,9 @@ public class FlutterWebViewController: NSView, Disposable {
                 // before the first load, so the page's first requests meet them.
                 let identifiers = webView.settings?.contentRuleListIdentifiers ?? []
                 webView.attachContentRuleLists(identifiers: identifiers) {
-                    self.compileContentBlockersAndLoad(webView: webView, initialUrlRequest: initialUrlRequest, initialFile: initialFile, initialData: initialData)
+                    webView.attachWebExtensions {
+                        self.compileContentBlockersAndLoad(webView: webView, initialUrlRequest: initialUrlRequest, initialFile: initialFile, initialData: initialData)
+                    }
                 }
                 return
             }

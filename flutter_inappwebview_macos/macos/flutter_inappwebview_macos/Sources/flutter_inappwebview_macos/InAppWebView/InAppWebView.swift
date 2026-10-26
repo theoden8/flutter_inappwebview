@@ -353,6 +353,17 @@ public class InAppWebView: WKWebView, WKUIDelegate,
                     incognito: settings.incognito,
                     proxySettings: settings.proxySettings.flatMap { ProxySettings.fromMap(map: $0) })
             }
+            // [WebSpace fork patch] Extensions take the container's controller,
+            // so their storage and cookie access follow the container.
+            #if compiler(>=6.1)
+            if #available(macOS 15.4, *),
+               let spec = WebExtensionAttachSpec(map: settings.webExtensions),
+               let controller = WebExtensionHost.shared.controller(
+                   for: spec, containerId: boundContainerId,
+                   dataStore: configuration.websiteDataStore) {
+                configuration.webExtensionController = controller
+            }
+            #endif
             if !settings.applicationNameForUserAgent.isEmpty {
                 if let applicationNameForUserAgent = configuration.applicationNameForUserAgent {
                     configuration.applicationNameForUserAgent = applicationNameForUserAgent + " " + settings.applicationNameForUserAgent
@@ -633,6 +644,21 @@ public class InAppWebView: WKWebView, WKUIDelegate,
         let assetURL = try Util.getUrlAsset(assetFilePath: assetFilePath)
         let urlRequest = URLRequest(url: assetURL)
         loadUrl(urlRequest: urlRequest, allowingReadAccessTo: nil)
+    }
+    
+    // [WebSpace fork patch] Loads the extensions `settings.webExtensions`
+    // names into the controller `preWKWebViewConfiguration` attached,
+    // before the first load, so their content scripts meet the first page.
+    public func attachWebExtensions(completion: @escaping () -> Void) {
+        #if compiler(>=6.1)
+        if #available(macOS 15.4, *),
+           let controller = configuration.webExtensionController,
+           let spec = WebExtensionAttachSpec(map: settings?.webExtensions) {
+            WebExtensionHost.shared.load(spec, into: controller, completion: completion)
+            return
+        }
+        #endif
+        completion()
     }
     
     // [WebSpace fork patch] Attach the content rule lists the host app compiled

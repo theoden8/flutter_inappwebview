@@ -228,6 +228,14 @@ public class ContainerManager: ChannelDelegate {
                     // created again under the same id starts from the
                     // app-wide proxy, like any new container.
                     ProxyManager.setRoute(nil, forContainer: containerId)
+                    // [WebSpace fork patch] And what its extensions stored.
+                    #if compiler(>=6.1)
+                    if #available(macOS 15.4, *) {
+                        Task { @MainActor in
+                            WebExtensionHost.shared.removeData(forContainer: containerId)
+                        }
+                    }
+                    #endif
                 } else if let store = evicted {
                     ContainerManager.recacheDataStore(store, forContainer: containerId)
                 }

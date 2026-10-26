@@ -194,6 +194,8 @@ export 'user_script_injection_time.dart' show UserScriptInjectionTime;
 export 'vertical_scrollbar_position.dart'
     show VerticalScrollbarPosition, AndroidVerticalScrollbarPosition;
 export 'web_archive_format.dart' show WebArchiveFormat;
+export 'web_extension_attach.dart' show WebExtensionAttach;
+export 'web_extension_context_spec.dart' show WebExtensionContextSpec;
 export 'web_authentication_session_error.dart'
     show WebAuthenticationSessionError;
 export 'web_history.dart' show WebHistory;

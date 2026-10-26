@@ -19,6 +19,7 @@ import '../types/pdf_toolbar_items.dart';
 import '../types/referrer_policy.dart';
 import '../types/renderer_priority_policy.dart';
 import '../types/sandbox.dart';
+import '../types/web_extension_attach.dart';
 import '../types/scrollbar_style.dart';
 import '../types/scrollview_content_inset_adjustment_behavior.dart';
 import '../types/scrollview_deceleration_rate.dart';
@@ -559,6 +560,30 @@ because there isn't any way to make the website data store non-persistent for th
     ],
   )
   ProxySettings_? proxySettings;
+
+  ///[WebSpace fork patch] The web extensions this WebView runs. They load
+  ///into the extension controller of the WebView's [containerId], before
+  ///its first load, with the hosts and permissions each names and no more.
+  ///
+  ///Ignored without a [containerId] (unless [incognito], which gets a
+  ///controller of its own), and below iOS 18.4 and macOS 15.4.
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        available: '18.4',
+        apiName: 'WKWebViewConfiguration.webExtensionController',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebviewconfiguration/webextensioncontroller',
+      ),
+      MacOSPlatform(
+        available: '15.4',
+        apiName: 'WKWebViewConfiguration.webExtensionController',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebviewconfiguration/webextensioncontroller',
+      ),
+    ],
+  )
+  WebExtensionAttach_? webExtensions;
 
   ///Sets whether WebView should use browser caching. The default value is `true`.
   @SupportedPlatforms(
@@ -3523,6 +3548,7 @@ as it can cause framerate drops on animations in Android 9 and lower (see [Hybri
     this.incognito = false,
     this.containerId,
     this.proxySettings,
+    this.webExtensions,
     this.cacheEnabled = true,
     this.transparentBackground = false,
     this.disableVerticalScroll = false,

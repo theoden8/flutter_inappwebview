@@ -49,6 +49,9 @@ public class InAppWebViewSettings: ISettings<InAppWebView> {
     // property as the Swift class). Honored only on iOS 17+ where Apple
     // exposes `WKWebsiteDataStore.proxyConfigurations`. Ignored otherwise.
     var proxySettings: [String: Any?]? = nil
+    // [WebSpace fork patch] `InAppWebViewSettings.webExtensions`, read by
+    // `WebExtensionAttachSpec`. A map for the same reason as proxySettings.
+    var webExtensions: [String: Any?]? = nil
     var cacheEnabled = true
     var transparentBackground = false
     var disableVerticalScroll = false
@@ -146,6 +149,10 @@ public class InAppWebViewSettings: ISettings<InAppWebView> {
         if let proxySettingsMap = settings["proxySettings"] as? [String: Any?] {
             proxySettings = proxySettingsMap
             settings.removeValue(forKey: "proxySettings")
+        }
+        if let webExtensionsMap = settings["webExtensions"] as? [String: Any?] {
+            webExtensions = webExtensionsMap
+            settings.removeValue(forKey: "webExtensions")
         }
         let _ = super.parse(settings: settings)
         if #available(iOS 13.0, *) {} else {
