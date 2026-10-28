@@ -57,6 +57,38 @@ class ContainerController {
   Future<bool> clearContainerData(String containerId) =>
       platform.clearContainerData(containerId);
 
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.openWebExtensionPage}
+  ///
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.openWebExtensionPage.supported_platforms}
+  Future<bool> openWebExtensionPage({
+    required String containerId,
+    required WebExtensionAttach attach,
+    required String extensionId,
+    required WebExtensionPage page,
+  }) => platform.openWebExtensionPage(
+    containerId: containerId,
+    attach: attach,
+    extensionId: extensionId,
+    page: page,
+  );
+
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.removeWebExtensionData}
+  ///
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.removeWebExtensionData.supported_platforms}
+  Future<void> removeWebExtensionData({
+    required String extensionId,
+    required List<String> containerIds,
+  }) => platform.removeWebExtensionData(
+    extensionId: extensionId,
+    containerIds: containerIds,
+  );
+
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.inspectWebExtension}
+  ///
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.inspectWebExtension.supported_platforms}
+  Future<WebExtensionReport?> inspectWebExtension(String path) =>
+      platform.inspectWebExtension(path);
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   static bool isClassSupported({TargetPlatform? platform}) =>
       PlatformContainerController.static().isClassSupported(platform: platform);

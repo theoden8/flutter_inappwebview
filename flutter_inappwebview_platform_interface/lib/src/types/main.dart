@@ -196,6 +196,8 @@ export 'vertical_scrollbar_position.dart'
 export 'web_archive_format.dart' show WebArchiveFormat;
 export 'web_extension_attach.dart' show WebExtensionAttach;
 export 'web_extension_context_spec.dart' show WebExtensionContextSpec;
+export 'web_extension_page.dart' show WebExtensionPage;
+export 'web_extension_report.dart' show WebExtensionReport;
 export 'web_authentication_session_error.dart'
     show WebAuthenticationSessionError;
 export 'web_history.dart' show WebHistory;

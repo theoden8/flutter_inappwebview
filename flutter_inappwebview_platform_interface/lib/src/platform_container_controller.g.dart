@@ -125,6 +125,57 @@ enum PlatformContainerControllerMethod {
   ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
   ///{@endtemplate}
   hasContainer,
+
+  ///Can be used to check if the [PlatformContainerController.inspectWebExtension] method is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.inspectWebExtension.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 18.4+ ([Official API - WKWebExtension.errors](https://developer.apple.com/documentation/webkit/wkwebextension))
+  ///- macOS WKWebView 15.4+ ([Official API - WKWebExtension.errors](https://developer.apple.com/documentation/webkit/wkwebextension))
+  ///
+  ///**Parameters - Officially Supported Platforms/Implementations**:
+  ///- [path]: all platforms
+  ///
+  ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
+  ///{@endtemplate}
+  inspectWebExtension,
+
+  ///Can be used to check if the [PlatformContainerController.openWebExtensionPage] method is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.openWebExtensionPage.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 18.4+ ([Official API - WKWebExtensionContext.performAction / optionsPageURL](https://developer.apple.com/documentation/webkit/wkwebextensioncontext)):
+  ///    - An options page opens in a sheet; a popup as WebKit's popupViewController.
+  ///- macOS WKWebView 15.4+ ([Official API - WKWebExtensionContext.performAction / optionsPageURL](https://developer.apple.com/documentation/webkit/wkwebextensioncontext)):
+  ///    - An options page opens in a window of its own; a popup as WebKit's popupPopover.
+  ///
+  ///**Parameters - Officially Supported Platforms/Implementations**:
+  ///- [containerId]: all platforms
+  ///- [attach]: all platforms
+  ///- [extensionId]: all platforms
+  ///- [page]: all platforms
+  ///
+  ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
+  ///{@endtemplate}
+  openWebExtensionPage,
+
+  ///Can be used to check if the [PlatformContainerController.removeWebExtensionData] method is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.removeWebExtensionData.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 18.4+ ([Official API - WKWebExtensionController.removeData(ofTypes:from:)](https://developer.apple.com/documentation/webkit/wkwebextensioncontroller))
+  ///- macOS WKWebView 15.4+ ([Official API - WKWebExtensionController.removeData(ofTypes:from:)](https://developer.apple.com/documentation/webkit/wkwebextensioncontroller))
+  ///
+  ///**Parameters - Officially Supported Platforms/Implementations**:
+  ///- [extensionId]: all platforms
+  ///- [containerIds]: all platforms
+  ///
+  ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
+  ///{@endtemplate}
+  removeWebExtensionData,
 }
 
 extension _PlatformContainerControllerMethodSupported
@@ -165,6 +216,24 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.iOS,
               TargetPlatform.macOS,
               TargetPlatform.linux,
+            ].contains(platform ?? defaultTargetPlatform);
+      case PlatformContainerControllerMethod.inspectWebExtension:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
+            ].contains(platform ?? defaultTargetPlatform);
+      case PlatformContainerControllerMethod.openWebExtensionPage:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
+            ].contains(platform ?? defaultTargetPlatform);
+      case PlatformContainerControllerMethod.removeWebExtensionData:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
             ].contains(platform ?? defaultTargetPlatform);
     }
   }

@@ -101,6 +101,42 @@ class MacOSContainerController extends PlatformContainerController
   }
 
   @override
+  Future<bool> openWebExtensionPage({
+    required String containerId,
+    required WebExtensionAttach attach,
+    required String extensionId,
+    required WebExtensionPage page,
+  }) async {
+    final shown = await channel?.invokeMethod<bool>('openWebExtensionPage', {
+      'containerId': containerId,
+      'attach': attach.toMap(),
+      'extensionId': extensionId,
+      'page': page.toNativeValue(),
+    });
+    return shown ?? false;
+  }
+
+  @override
+  Future<void> removeWebExtensionData({
+    required String extensionId,
+    required List<String> containerIds,
+  }) async {
+    await channel?.invokeMethod<bool>('removeWebExtensionData', {
+      'extensionId': extensionId,
+      'containerIds': containerIds,
+    });
+  }
+
+  @override
+  Future<WebExtensionReport?> inspectWebExtension(String path) async {
+    final report = await channel?.invokeMethod<Map<dynamic, dynamic>>(
+      'inspectWebExtension',
+      {'path': path},
+    );
+    return WebExtensionReport.fromMap(report?.cast<String, dynamic>());
+  }
+
+  @override
   void dispose() {
     // empty
   }

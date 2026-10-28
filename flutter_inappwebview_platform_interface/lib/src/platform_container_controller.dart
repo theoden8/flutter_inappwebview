@@ -5,6 +5,7 @@ import 'package:flutter_inappwebview_internal_annotations/flutter_inappwebview_i
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'inappwebview_platform.dart';
+import 'types/main.dart';
 
 part 'platform_container_controller.g.dart';
 
@@ -331,6 +332,105 @@ abstract class PlatformContainerController extends PlatformInterface {
   Future<bool> clearContainerData(String containerId) {
     throw UnimplementedError(
       'clearContainerData is not implemented on the current platform',
+    );
+  }
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.openWebExtensionPage}
+  ///[WebSpace fork patch] Shows [page] of the web extension [extensionId]
+  ///over the app, as the container [containerId] runs it.
+  ///
+  ///[attach] is the container's whole set, as its WebViews take it in
+  ///[InAppWebViewSettings.webExtensions]: the extensions load from it first
+  ///when no WebView of the container has loaded them, and an extension it
+  ///does not name is unloaded. The extension sees the container's WebViews
+  ///as its tabs, the last one attached active.
+  ///
+  ///Returns `false` when the extension is not loaded there, has no such
+  ///page, or [attach] is not persistent.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        apiName: 'WKWebExtensionContext.performAction / optionsPageURL',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontext',
+        available: '18.4',
+        note: "An options page opens in a sheet; a popup as WebKit's popupViewController.",
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebExtensionContext.performAction / optionsPageURL',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontext',
+        available: '15.4',
+        note: "An options page opens in a window of its own; a popup as WebKit's popupPopover.",
+      ),
+    ],
+  )
+  Future<bool> openWebExtensionPage({
+    required String containerId,
+    required WebExtensionAttach attach,
+    required String extensionId,
+    required WebExtensionPage page,
+  }) {
+    throw UnimplementedError(
+      'openWebExtensionPage is not implemented on the current platform',
+    );
+  }
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.removeWebExtensionData}
+  ///[WebSpace fork patch] Removes what the web extension [extensionId]
+  ///stored in each of [containerIds]: its storage, its cookies' extension
+  ///records and its rules. Other extensions' data, and the containers' own,
+  ///stay.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        apiName: 'WKWebExtensionController.removeData(ofTypes:from:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontroller',
+        available: '18.4',
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebExtensionController.removeData(ofTypes:from:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontroller',
+        available: '15.4',
+      ),
+    ],
+  )
+  Future<void> removeWebExtensionData({
+    required String extensionId,
+    required List<String> containerIds,
+  }) {
+    throw UnimplementedError(
+      'removeWebExtensionData is not implemented on the current platform',
+    );
+  }
+
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.inspectWebExtension}
+  ///[WebSpace fork patch] What the engine reports reading the unpacked web
+  ///extension at [path]. Null where web extensions are not available.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        apiName: 'WKWebExtension.errors',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextension',
+        available: '18.4',
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebExtension.errors',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextension',
+        available: '15.4',
+      ),
+    ],
+  )
+  Future<WebExtensionReport?> inspectWebExtension(String path) {
+    throw UnimplementedError(
+      'inspectWebExtension is not implemented on the current platform',
     );
   }
 

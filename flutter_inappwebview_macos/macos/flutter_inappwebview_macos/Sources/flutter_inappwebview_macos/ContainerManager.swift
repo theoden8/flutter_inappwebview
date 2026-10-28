@@ -181,9 +181,66 @@ public class ContainerManager: ChannelDelegate {
                 result(false); return
             }
             clearContainerData(containerId, result: result)
+        case "openWebExtensionPage":
+            openWebExtensionPage(args, result: result)
+        case "removeWebExtensionData":
+            removeWebExtensionData(args, result: result)
+        case "inspectWebExtension":
+            inspectWebExtension(args, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    // [WebSpace fork patch] The web extensions of a container, which its
+    // extension controller (WebExtensionHost) runs. Where extensions are not
+    // available each answers as if nothing was there.
+
+    private func openWebExtensionPage(_ args: [String: Any]?, result: @escaping FlutterResult) {
+        #if compiler(>=6.1)
+        if #available(macOS 15.4, *),
+           let containerId = args?["containerId"] as? String, !containerId.isEmpty,
+           let extensionId = args?["extensionId"] as? String, !extensionId.isEmpty,
+           let page = (args?["page"] as? String).flatMap({ WebExtensionPage(rawValue: $0) }),
+           let spec = WebExtensionAttachSpec(map: args?["attach"] as? [String: Any?]) {
+            Task { @MainActor in
+                WebExtensionHost.shared.openPage(page, extensionId: extensionId, spec: spec,
+                                                 containerId: containerId) { shown in
+                    result(shown)
+                }
+            }
+            return
+        }
+        #endif
+        result(false)
+    }
+
+    private func removeWebExtensionData(_ args: [String: Any]?, result: @escaping FlutterResult) {
+        #if compiler(>=6.1)
+        if #available(macOS 15.4, *),
+           let extensionId = args?["extensionId"] as? String, !extensionId.isEmpty {
+            let containerIds = args?["containerIds"] as? [String] ?? []
+            Task { @MainActor in
+                await WebExtensionHost.shared.removeData(ofExtension: extensionId, inContainers: containerIds)
+                result(true)
+            }
+            return
+        }
+        #endif
+        result(false)
+    }
+
+    private func inspectWebExtension(_ args: [String: Any]?, result: @escaping FlutterResult) {
+        #if compiler(>=6.1)
+        if #available(macOS 15.4, *),
+           let path = args?["path"] as? String, !path.isEmpty {
+            Task { @MainActor in
+                result(await WebExtensionHost.shared.inspect(path: path))
+            }
+            return
+        }
+        #endif
+        result(nil)
     }
 
     private func getAllContainerNames(result: @escaping FlutterResult) {

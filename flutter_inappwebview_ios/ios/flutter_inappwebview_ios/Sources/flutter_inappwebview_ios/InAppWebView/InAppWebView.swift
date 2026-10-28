@@ -1146,7 +1146,12 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
         if #available(iOS 18.4, *),
            let controller = configuration.webExtensionController,
            let spec = WebExtensionAttachSpec(map: settings?.webExtensions) {
-            WebExtensionHost.shared.load(spec, into: controller, completion: completion)
+            WebExtensionHost.shared.load(spec, into: controller) { [weak self] in
+                if let self = self {
+                    WebExtensionHost.shared.opened(self, controller: controller)
+                }
+                completion()
+            }
             return
         }
         #endif
@@ -3705,6 +3710,12 @@ if(window.\(JavaScriptBridgeJS.get_JAVASCRIPT_BRIDGE_NAME())[\(_callHandlerID)] 
     }
     
     public func dispose() {
+        // [WebSpace fork patch] Its extensions see its tab close.
+        #if compiler(>=6.1)
+        if #available(iOS 18.4, *) {
+            WebExtensionHost.shared.closed(self)
+        }
+        #endif
         channelDelegate?.dispose()
         channelDelegate = nil
         runWindowBeforeCreatedCallbacks()

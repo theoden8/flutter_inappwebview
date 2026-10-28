@@ -11,9 +11,18 @@
 //  else. Which hosts an extension may reach is the host app's decision;
 //  nothing here widens it.
 //
+//  An extension sees its container's WebViews as the tabs of one window,
+//  the last one attached active. Its options page, its action popup and
+//  the pages of its own it opens as tabs are shown natively, over the app.
+//
 
 import Foundation
 import WebKit
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// One extension of `InAppWebViewSettings.webExtensions`.
 struct WebExtensionContextSpec: Equatable {
@@ -54,6 +63,15 @@ struct WebExtensionAttachSpec {
     }
 }
 
+/// A page of an extension the host app asks to show.
+enum WebExtensionPage: String {
+    /// The extension's options page.
+    case options
+    /// The extension's action: its popup, or its click event when it has
+    /// no popup.
+    case action
+}
+
 #if compiler(>=6.1)
 @available(iOS 18.4, macOS 15.4, *)
 @MainActor
@@ -66,6 +84,12 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
     private var extensions: [String: WKWebExtension] = [:]
     /// What each loaded context was granted.
     private var grants: [ObjectIdentifier: WebExtensionContextSpec] = [:]
+    /// The window each controller's extensions see, by controller.
+    private var windows: [ObjectIdentifier: WebExtensionWindowRef] = [:]
+    /// The tab each WebView running extensions is shown as, by WebView.
+    private var tabs: [ObjectIdentifier: WebExtensionTabRef] = [:]
+    /// Every controller made, persistent or not, while it lives.
+    private let live = NSHashTable<WKWebExtensionController>.weakObjects()
 
     /// The controller a WebView takes: its container's when [spec] is
     /// persistent, one of its own otherwise. Nil for a persistent spec
@@ -94,6 +118,7 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         configuration.defaultWebsiteDataStore = dataStore
         let controller = WKWebExtensionController(configuration: configuration)
         controller.delegate = self
+        live.add(controller)
         return controller
     }
 
@@ -183,6 +208,146 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         }
     }
 
+    /// Unloads extension [extensionId] wherever it runs and removes what it
+    /// stored in each of [containerIds], as removing it from the host app's
+    /// library removes its files.
+    func removeData(ofExtension extensionId: String, inContainers containerIds: [String]) async {
+        for controller in live.allObjects {
+            if let context = controller.extensionContexts.first(where: { $0.uniqueIdentifier == extensionId }) {
+                unload(context, from: controller)
+            }
+        }
+        let types = WKWebExtensionController.allExtensionDataTypes
+        for containerId in containerIds {
+            let controller = controllers[containerId]
+                ?? WKWebExtensionController(configuration: WKWebExtensionController.Configuration(
+                    identifier: containerIdToUUID(containerId)))
+            let own = await controller.dataRecords(ofTypes: types)
+                .filter { $0.uniqueIdentifier == extensionId }
+            if !own.isEmpty {
+                await controller.removeData(ofTypes: types, from: own)
+            }
+        }
+    }
+
+    /// What WebKit reports reading the extension at [path]: the errors it
+    /// found, and whether it has an options page and an action. An
+    /// extension WebKit cannot read at all has that error alone.
+    func inspect(path: String) async -> [String: Any] {
+        do {
+            let webExtension = try await WKWebExtension(
+                resourceBaseURL: URL(fileURLWithPath: path, isDirectory: true))
+            let manifest = webExtension.manifest
+            let hasAction = ["action", "browser_action", "page_action"]
+                .contains { manifest[$0] != nil }
+            return [
+                "errors": webExtension.errors.map { $0.localizedDescription },
+                "hasOptionsPage": webExtension.hasOptionsPage,
+                "hasAction": hasAction,
+            ]
+        } catch {
+            return ["errors": [error.localizedDescription], "hasOptionsPage": false, "hasAction": false]
+        }
+    }
+
+    /// Shows [page] of extension [extensionId], run as [spec] runs it in
+    /// [containerId]. [spec] is the container's whole set, as its WebViews
+    /// take it: a context it does not name is unloaded. False when the
+    /// extension is not loaded there or has no such page.
+    func openPage(_ page: WebExtensionPage, extensionId: String, spec: WebExtensionAttachSpec,
+                  containerId: String, completion: @escaping (Bool) -> Void) {
+        guard spec.persistent,
+              let controller = controller(
+                for: spec, containerId: containerId,
+                dataStore: ContainerManager.getOrCreateDataStore(forContainer: containerId)) else {
+            completion(false)
+            return
+        }
+        load(spec, into: controller) { [weak self] in
+            guard let self = self,
+                  let context = controller.extensionContexts.first(where: { $0.uniqueIdentifier == extensionId }) else {
+                completion(false)
+                return
+            }
+            switch page {
+            case .options:
+                completion(self.presentOptions(of: context))
+            case .action:
+                context.performAction(for: self.windows[ObjectIdentifier(controller)]?.active)
+                completion(true)
+            }
+        }
+    }
+
+    // MARK: Tabs and windows
+
+    /// [webView] runs [controller]'s extensions: it opens as the active tab
+    /// of the controller's window.
+    func opened(_ webView: WKWebView, controller: WKWebExtensionController) {
+        let key = ObjectIdentifier(webView)
+        if tabs[key] != nil {
+            return
+        }
+        let window = windowOf(controller)
+        let previous = window.active
+        let tab = WebExtensionTabRef(webView: webView, window: window)
+        window.members.append(tab)
+        tabs[key] = tab
+        controller.didOpenTab(tab)
+        controller.didActivateTab(tab, previousActiveTab: previous)
+    }
+
+    /// [webView] went: its tab closes, and its window with its last tab.
+    func closed(_ webView: WKWebView) {
+        guard let tab = tabs.removeValue(forKey: ObjectIdentifier(webView)),
+              let controller = webView.configuration.webExtensionController else {
+            return
+        }
+        let window = tab.window
+        window?.members.removeAll { $0 === tab }
+        let windowIsClosing = window?.members.isEmpty ?? false
+        controller.didCloseTab(tab, windowIsClosing: windowIsClosing)
+        if let window = window, windowIsClosing {
+            windows[ObjectIdentifier(controller)] = nil
+            controller.didCloseWindow(window)
+        }
+    }
+
+    private func windowOf(_ controller: WKWebExtensionController) -> WebExtensionWindowRef {
+        let key = ObjectIdentifier(controller)
+        if let window = windows[key] {
+            return window
+        }
+        let window = WebExtensionWindowRef()
+        windows[key] = window
+        controller.didOpenWindow(window)
+        controller.didFocusWindow(window)
+        return window
+    }
+
+    // MARK: Pages
+
+    private func presentOptions(of context: WKWebExtensionContext) -> Bool {
+        guard let url = context.optionsPageURL else {
+            return false
+        }
+        return presentPage(url, of: context)
+    }
+
+    /// An extension page loads only in a WebView configured for its context.
+    private func presentPage(_ url: URL, of context: WKWebExtensionContext) -> Bool {
+        guard let configuration = context.webViewConfiguration else {
+            return false
+        }
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.load(URLRequest(url: url))
+        return WebExtensionPresenter.present(webView, title: context.webExtension.displayName ?? "")
+    }
+
+    private func isPage(_ url: URL, of context: WKWebExtensionContext) -> Bool {
+        return url.scheme == context.baseURL.scheme && url.host == context.baseURL.host
+    }
+
     private func grantsOf(_ context: WKWebExtensionContext) -> WebExtensionContextSpec? {
         return grants[ObjectIdentifier(context)]
     }
@@ -227,10 +392,45 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
     }
 
     func webExtensionController(_ controller: WKWebExtensionController,
+                                openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {
+        guard let window = windows[ObjectIdentifier(controller)] else {
+            return []
+        }
+        return [window]
+    }
+
+    func webExtensionController(_ controller: WKWebExtensionController,
+                                focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {
+        return windows[ObjectIdentifier(controller)]
+    }
+
+    /// Only a page of the extension's own opens, shown as its options page
+    /// is; a tab on the web would run outside the host app's sites.
+    func webExtensionController(_ controller: WKWebExtensionController,
                                 openNewTabUsing configuration: WKWebExtension.TabConfiguration,
                                 for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping ((any WKWebExtensionTab)?, (any Error)?) -> Void) {
+        if let url = configuration.url, isPage(url, of: extensionContext),
+           presentPage(url, of: extensionContext) {
+            completionHandler(nil, nil)
+            return
+        }
         completionHandler(nil, WebExtensionHost.refusal("This browser does not open tabs for extensions"))
+    }
+
+    func webExtensionController(_ controller: WKWebExtensionController,
+                                openOptionsPageFor extensionContext: WKWebExtensionContext,
+                                completionHandler: @escaping ((any Error)?) -> Void) {
+        completionHandler(presentOptions(of: extensionContext)
+                          ? nil : WebExtensionHost.refusal("The options page could not be shown"))
+    }
+
+    func webExtensionController(_ controller: WKWebExtensionController,
+                                presentActionPopup action: WKWebExtension.Action,
+                                for context: WKWebExtensionContext,
+                                completionHandler: @escaping ((any Error)?) -> Void) {
+        completionHandler(WebExtensionPresenter.presentPopup(of: action)
+                          ? nil : WebExtensionHost.refusal("The popup could not be shown"))
     }
 
     func webExtensionController(_ controller: WKWebExtensionController,
@@ -255,4 +455,154 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         completionHandler(WebExtensionHost.refusal("Native messaging is not available"))
     }
 }
+
+/// A WebView running a container's extensions, as they see it.
+@available(iOS 18.4, macOS 15.4, *)
+@MainActor
+final class WebExtensionTabRef: NSObject, WKWebExtensionTab {
+    weak var webView: WKWebView?
+    weak var window: WebExtensionWindowRef?
+
+    init(webView: WKWebView, window: WebExtensionWindowRef) {
+        self.webView = webView
+        self.window = window
+    }
+
+    func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {
+        return window
+    }
+
+    func webView(for context: WKWebExtensionContext) -> WKWebView? {
+        return webView
+    }
+
+    func title(for context: WKWebExtensionContext) -> String? {
+        return webView?.title
+    }
+
+    func url(for context: WKWebExtensionContext) -> URL? {
+        return webView?.url
+    }
+
+    func isLoadingComplete(for context: WKWebExtensionContext) -> Bool {
+        return !(webView?.isLoading ?? false)
+    }
+
+    func isSelected(for context: WKWebExtensionContext) -> Bool {
+        return window?.active === self
+    }
+}
+
+/// The one window of a container's tabs.
+@available(iOS 18.4, macOS 15.4, *)
+@MainActor
+final class WebExtensionWindowRef: NSObject, WKWebExtensionWindow {
+    var members: [WebExtensionTabRef] = []
+
+    /// The tab attached last.
+    var active: WebExtensionTabRef? {
+        return members.last
+    }
+
+    func tabs(for context: WKWebExtensionContext) -> [any WKWebExtensionTab] {
+        return members
+    }
+
+    func activeTab(for context: WKWebExtensionContext) -> (any WKWebExtensionTab)? {
+        return active
+    }
+}
+
+/// Shows an extension's pages over the app: a page in a sheet on iOS and
+/// a window of its own on macOS, a popup as WebKit prepares it.
+@available(iOS 18.4, macOS 15.4, *)
+@MainActor
+enum WebExtensionPresenter {
+    #if os(iOS)
+    static func present(_ webView: WKWebView, title: String) -> Bool {
+        guard let host = topViewController() else {
+            return false
+        }
+        let page = UIViewController()
+        page.view = webView
+        page.title = title
+        let navigation = UINavigationController(rootViewController: page)
+        page.navigationItem.rightBarButtonItem = UIBarButtonItem(
+            systemItem: .close,
+            primaryAction: UIAction { [weak navigation] _ in
+                navigation?.dismiss(animated: true)
+            })
+        host.present(navigation, animated: true)
+        return true
+    }
+
+    static func presentPopup(of action: WKWebExtension.Action) -> Bool {
+        guard let popup = action.popupViewController, let host = topViewController() else {
+            return false
+        }
+        if let anchor = popup.popoverPresentationController {
+            anchor.sourceView = host.view
+            anchor.sourceRect = CGRect(x: host.view.bounds.maxX - 1, y: host.view.safeAreaInsets.top,
+                                       width: 1, height: 1)
+        }
+        host.present(popup, animated: true)
+        return true
+    }
+
+    private static func topViewController() -> UIViewController? {
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
+        var top = window?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
+    }
+    #elseif os(macOS)
+    static func present(_ webView: WKWebView, title: String) -> Bool {
+        let page = NSViewController()
+        page.view = webView
+        let window = NSWindow(contentViewController: page)
+        window.title = title
+        window.setContentSize(NSSize(width: 720, height: 560))
+        PageWindows.shared.show(window)
+        return true
+    }
+
+    static func presentPopup(of action: WKWebExtension.Action) -> Bool {
+        guard let popover = action.popupPopover, let view = NSApp.keyWindow?.contentView else {
+            return false
+        }
+        let anchor = NSRect(x: view.bounds.maxX - 1, y: view.bounds.maxY - 1, width: 1, height: 1)
+        popover.show(relativeTo: anchor, of: view, preferredEdge: .minY)
+        return true
+    }
+    #endif
+}
+
+#if os(macOS)
+/// Keeps each page window alive while it is open.
+@MainActor
+private final class PageWindows: NSObject, NSWindowDelegate {
+    static let shared = PageWindows()
+
+    private var open: [NSWindow] = []
+
+    func show(_ window: NSWindow) {
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        open.append(window)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else {
+            return
+        }
+        open.removeAll { $0 === window }
+    }
+}
+#endif
 #endif
