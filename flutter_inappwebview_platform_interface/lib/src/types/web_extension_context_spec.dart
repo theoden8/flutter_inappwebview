@@ -40,10 +40,16 @@ class WebExtensionContextSpec_ {
   ///Every other permission is refused.
   List<String> grantedPermissions;
 
+  ///What [path] holds now, such as the extension's version: when it changes
+  ///the files are read again and a loaded context is replaced, keeping the
+  ///extension's data.
+  String revision;
+
   WebExtensionContextSpec_({
     required this.id,
     required this.path,
     this.grantedMatchPatterns = const [],
     this.grantedPermissions = const [],
+    this.revision = '',
   });
 }

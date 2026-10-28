@@ -29,6 +29,11 @@ class WebExtensionContextSpec {
   ///Absolute path of the folder holding the extension's `manifest.json`.
   String path;
 
+  ///What [path] holds now, such as the extension's version: when it changes
+  ///the files are read again and a loaded context is replaced, keeping the
+  ///extension's data.
+  String revision;
+
   ///
   ///**Officially Supported Platforms/Implementations**:
   ///- iOS WKWebView 18.4+ ([Official API - WKWebExtensionContext](https://developer.apple.com/documentation/webkit/wkwebextensioncontext))
@@ -38,6 +43,7 @@ class WebExtensionContextSpec {
     this.grantedPermissions = const [],
     required this.id,
     required this.path,
+    this.revision = '',
   });
 
   ///Gets a possible [WebExtensionContextSpec] instance from a [Map] value.
@@ -59,6 +65,9 @@ class WebExtensionContextSpec {
         map['grantedPermissions']!.cast<String>(),
       );
     }
+    if (map['revision'] != null) {
+      instance.revision = map['revision'];
+    }
     return instance;
   }
 
@@ -69,6 +78,7 @@ class WebExtensionContextSpec {
       "grantedPermissions": grantedPermissions,
       "id": id,
       "path": path,
+      "revision": revision,
     };
   }
 
@@ -79,6 +89,6 @@ class WebExtensionContextSpec {
 
   @override
   String toString() {
-    return 'WebExtensionContextSpec{grantedMatchPatterns: $grantedMatchPatterns, grantedPermissions: $grantedPermissions, id: $id, path: $path}';
+    return 'WebExtensionContextSpec{grantedMatchPatterns: $grantedMatchPatterns, grantedPermissions: $grantedPermissions, id: $id, path: $path, revision: $revision}';
   }
 }

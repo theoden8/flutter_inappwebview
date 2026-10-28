@@ -30,6 +30,8 @@ struct WebExtensionContextSpec: Equatable {
     let path: String
     let grantedMatchPatterns: [String]
     let grantedPermissions: [String]
+    /// What the folder holds now; a new one is read again from disk.
+    let revision: String
 
     init?(map: [String: Any?]) {
         guard let id = map["id"] as? String, !id.isEmpty,
@@ -40,6 +42,7 @@ struct WebExtensionContextSpec: Equatable {
         self.path = path
         grantedMatchPatterns = map["grantedMatchPatterns"] as? [String] ?? []
         grantedPermissions = map["grantedPermissions"] as? [String] ?? []
+        revision = map["revision"] as? String ?? ""
     }
 }
 
@@ -80,7 +83,7 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
 
     /// Persistent controllers, by container id.
     private var controllers: [String: WKWebExtensionController] = [:]
-    /// Each extension read from disk once, by path.
+    /// Each extension read from disk once, by path and revision.
     private var extensions: [String: WKWebExtension] = [:]
     /// What each loaded context was granted.
     private var grants: [ObjectIdentifier: WebExtensionContextSpec] = [:]
@@ -149,7 +152,7 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         }
         let webExtension: WKWebExtension
         do {
-            webExtension = try await extensionAt(path: spec.path)
+            webExtension = try await extensionAt(path: spec.path, revision: spec.revision)
         } catch {
             print("[WebSpace] web extension \(spec.id) did not load from \(spec.path): \(error)")
             return
@@ -186,13 +189,15 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         }
     }
 
-    private func extensionAt(path: String) async throws -> WKWebExtension {
-        if let cached = extensions[path] {
+    private func extensionAt(path: String, revision: String) async throws -> WKWebExtension {
+        let key = path + "\u{0}" + revision
+        if let cached = extensions[key] {
             return cached
         }
         let webExtension = try await WKWebExtension(
             resourceBaseURL: URL(fileURLWithPath: path, isDirectory: true))
-        extensions[path] = webExtension
+        extensions = extensions.filter { !$0.key.hasPrefix(path + "\u{0}") }
+        extensions[key] = webExtension
         return webExtension
     }
 
