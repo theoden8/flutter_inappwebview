@@ -25,6 +25,11 @@ class WebExtensionReport {
   ///Whether the extension has an options page to open.
   bool hasOptionsPage;
 
+  ///Whether the engine loads the extension on this device. On iOS and
+  ///visionOS WebKit refuses one whose background stays loaded (a Manifest
+  ///V2 background without `"persistent": false`), and runs none of it.
+  bool loadsHere;
+
   ///
   ///**Officially Supported Platforms/Implementations**:
   ///- iOS WKWebView 18.4+ ([Official API - WKWebExtension](https://developer.apple.com/documentation/webkit/wkwebextension))
@@ -33,6 +38,7 @@ class WebExtensionReport {
     this.errors = const [],
     this.hasAction = false,
     this.hasOptionsPage = false,
+    this.loadsHere = true,
   });
 
   ///Gets a possible [WebExtensionReport] instance from a [Map] value.
@@ -53,6 +59,9 @@ class WebExtensionReport {
     if (map['hasOptionsPage'] != null) {
       instance.hasOptionsPage = map['hasOptionsPage'];
     }
+    if (map['loadsHere'] != null) {
+      instance.loadsHere = map['loadsHere'];
+    }
     return instance;
   }
 
@@ -62,6 +71,7 @@ class WebExtensionReport {
       "errors": errors,
       "hasAction": hasAction,
       "hasOptionsPage": hasOptionsPage,
+      "loadsHere": loadsHere,
     };
   }
 
@@ -72,6 +82,6 @@ class WebExtensionReport {
 
   @override
   String toString() {
-    return 'WebExtensionReport{errors: $errors, hasAction: $hasAction, hasOptionsPage: $hasOptionsPage}';
+    return 'WebExtensionReport{errors: $errors, hasAction: $hasAction, hasOptionsPage: $hasOptionsPage, loadsHere: $loadsHere}';
   }
 }

@@ -34,9 +34,15 @@ class WebExtensionReport_ {
   ///or `page_action`).
   bool hasAction;
 
+  ///Whether the engine loads the extension on this device. On iOS and
+  ///visionOS WebKit refuses one whose background stays loaded (a Manifest
+  ///V2 background without `"persistent": false`), and runs none of it.
+  bool loadsHere;
+
   WebExtensionReport_({
     this.errors = const [],
     this.hasOptionsPage = false,
     this.hasAction = false,
+    this.loadsHere = true,
   });
 }

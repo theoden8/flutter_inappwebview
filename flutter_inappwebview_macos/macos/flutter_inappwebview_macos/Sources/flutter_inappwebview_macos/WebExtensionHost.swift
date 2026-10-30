@@ -236,8 +236,9 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
     }
 
     /// What WebKit reports reading the extension at [path]: the errors it
-    /// found, and whether it has an options page and an action. An
-    /// extension WebKit cannot read at all has that error alone.
+    /// found, whether it has an options page and an action, and whether
+    /// WebKit loads it on this device. An extension WebKit cannot read at
+    /// all has that error alone.
     func inspect(path: String) async -> [String: Any] {
         do {
             let webExtension = try await WKWebExtension(
@@ -245,13 +246,26 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
             let manifest = webExtension.manifest
             let hasAction = ["action", "browser_action", "page_action"]
                 .contains { manifest[$0] != nil }
+            // WebKit's WebExtensionContext::load refuses, on iOS and visionOS,
+            // an extension whose background stays loaded, before running any of it.
+            #if os(iOS) || os(visionOS)
+            let loadsHere = !webExtension.hasPersistentBackgroundContent
+            #else
+            let loadsHere = true
+            #endif
             return [
                 "errors": webExtension.errors.map { $0.localizedDescription },
                 "hasOptionsPage": webExtension.hasOptionsPage,
                 "hasAction": hasAction,
+                "loadsHere": loadsHere,
             ]
         } catch {
-            return ["errors": [error.localizedDescription], "hasOptionsPage": false, "hasAction": false]
+            return [
+                "errors": [error.localizedDescription],
+                "hasOptionsPage": false,
+                "hasAction": false,
+                "loadsHere": false,
+            ]
         }
     }
 
