@@ -68,7 +68,26 @@ class MacOSContainerController extends PlatformContainerController
     return _staticValue;
   }
 
-  Future<dynamic> _handleMethod(MethodCall call) async {}
+  // Static: [instance] and [static] each install a handler on the one
+  // channel, and the later one receives every call.
+  static final StreamController<WebExtensionProblem> _webExtensionProblems =
+      StreamController.broadcast();
+
+  Future<dynamic> _handleMethod(MethodCall call) async {
+    switch (call.method) {
+      case 'onWebExtensionProblem':
+        final problem = WebExtensionProblem.fromMap(
+          (call.arguments as Map?)?.cast<String, dynamic>(),
+        );
+        if (problem != null) {
+          _webExtensionProblems.add(problem);
+        }
+    }
+  }
+
+  @override
+  Stream<WebExtensionProblem> get webExtensionProblems =>
+      _webExtensionProblems.stream;
 
   @override
   Future<List<String>> getAllContainerNames() async {

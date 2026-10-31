@@ -14,6 +14,7 @@
 //  An extension sees its container's WebViews as the tabs of one window,
 //  the last one attached active. Its options page, its action popup and
 //  the pages of its own it opens as tabs are shown natively, over the app.
+//  What goes wrong running one is reported to the host app as it happens.
 //
 
 import Foundation
@@ -51,6 +52,9 @@ struct WebExtensionContextSpec: Equatable {
 struct WebExtensionAttachSpec {
     let persistent: Bool
     let contexts: [WebExtensionContextSpec]
+    /// Whether Web Inspector may inspect the extensions' background, popups
+    /// and pages.
+    let inspectable: Bool
 
     init?(map: [String: Any?]?) {
         guard let map = map else {
@@ -63,6 +67,7 @@ struct WebExtensionAttachSpec {
         }
         self.persistent = map["persistent"] as? Bool ?? true
         self.contexts = contexts
+        self.inspectable = map["inspectable"] as? Bool ?? false
     }
 }
 
@@ -93,6 +98,19 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
     private var tabs: [ObjectIdentifier: WebExtensionTabRef] = [:]
     /// Every controller made, persistent or not, while it lives.
     private let live = NSHashTable<WKWebExtensionController>.weakObjects()
+    /// The extension each page shown over the app belongs to, while it shows.
+    private let pages = NSMapTable<WKWebView, NSString>.weakToStrongObjects()
+
+    /// Where the host app hears what goes wrong: an extension that did not
+    /// load, a page or popup that could not be shown, a page that failed to
+    /// load, a tab or window an extension asked for and was refused. The
+    /// container channel sends each to Dart.
+    var onProblem: ((_ extensionId: String, _ message: String) -> Void)?
+
+    private func report(_ extensionId: String, _ message: String) {
+        print("[WebSpace] web extension \(extensionId) \(message)")
+        onProblem?(extensionId, message)
+    }
 
     /// The controller a WebView takes: its container's when [spec] is
     /// persistent, one of its own otherwise. Nil for a persistent spec
@@ -139,6 +157,10 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
             for contextSpec in spec.contexts {
                 await load(contextSpec, into: controller)
             }
+            // WebKit passes it on to the background, popups and tab pages.
+            for context in controller.extensionContexts {
+                context.isInspectable = spec.inspectable
+            }
             completion()
         }
     }
@@ -154,7 +176,7 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         do {
             webExtension = try await extensionAt(path: spec.path, revision: spec.revision)
         } catch {
-            print("[WebSpace] web extension \(spec.id) did not load from \(spec.path): \(error)")
+            report(spec.id, "could not be read from \(spec.path): \(error.localizedDescription)")
             return
         }
         let context = WKWebExtensionContext(for: webExtension)
@@ -176,7 +198,7 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
             try controller.load(context)
             grants[ObjectIdentifier(context)] = spec
         } catch {
-            print("[WebSpace] web extension \(spec.id) did not load into its controller: \(error)")
+            report(spec.id, "did not load: \(error.localizedDescription)")
         }
     }
 
@@ -185,7 +207,7 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         do {
             try controller.unload(context)
         } catch {
-            print("[WebSpace] web extension \(context.uniqueIdentifier) did not unload: \(error)")
+            report(context.uniqueIdentifier, "did not unload: \(error.localizedDescription)")
         }
     }
 
@@ -279,12 +301,17 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
               let controller = controller(
                 for: spec, containerId: containerId,
                 dataStore: ContainerManager.getOrCreateDataStore(forContainer: containerId)) else {
+            report(extensionId, "has no container to open its \(page.rawValue) page in")
             completion(false)
             return
         }
         load(spec, into: controller) { [weak self] in
-            guard let self = self,
-                  let context = controller.extensionContexts.first(where: { $0.uniqueIdentifier == extensionId }) else {
+            guard let self = self else {
+                completion(false)
+                return
+            }
+            guard let context = controller.extensionContexts.first(where: { $0.uniqueIdentifier == extensionId }) else {
+                self.report(extensionId, "is not loaded, so its \(page.rawValue) page cannot open")
                 completion(false)
                 return
             }
@@ -348,6 +375,7 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
 
     private func presentOptions(of context: WKWebExtensionContext) -> Bool {
         guard let url = context.optionsPageURL else {
+            report(context.uniqueIdentifier, "has no options page")
             return false
         }
         return presentPage(url, of: context)
@@ -356,11 +384,19 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
     /// An extension page loads only in a WebView configured for its context.
     private func presentPage(_ url: URL, of context: WKWebExtensionContext) -> Bool {
         guard let configuration = context.webViewConfiguration else {
+            report(context.uniqueIdentifier, "is not loaded, so \(url.absoluteString) cannot open")
             return false
         }
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isInspectable = context.isInspectable
+        webView.navigationDelegate = self
+        pages.setObject(context.uniqueIdentifier as NSString, forKey: webView)
         webView.load(URLRequest(url: url))
-        return WebExtensionPresenter.present(webView, title: context.webExtension.displayName ?? "")
+        guard WebExtensionPresenter.present(webView, title: context.webExtension.displayName ?? "") else {
+            report(context.uniqueIdentifier, "page \(url.absoluteString) has nowhere to show")
+            return false
+        }
+        return true
     }
 
     private func isPage(_ url: URL, of context: WKWebExtensionContext) -> Bool {
@@ -429,10 +465,14 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
                                 openNewTabUsing configuration: WKWebExtension.TabConfiguration,
                                 for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping ((any WKWebExtensionTab)?, (any Error)?) -> Void) {
-        if let url = configuration.url, isPage(url, of: extensionContext),
-           presentPage(url, of: extensionContext) {
-            completionHandler(nil, nil)
-            return
+        if let url = configuration.url, isPage(url, of: extensionContext) {
+            if presentPage(url, of: extensionContext) {
+                completionHandler(nil, nil)
+                return
+            }
+        } else {
+            report(extensionContext.uniqueIdentifier,
+                   "asked for a tab at \(configuration.url?.absoluteString ?? "no address"), which only opens for its own pages")
         }
         completionHandler(nil, WebExtensionHost.refusal("This browser does not open tabs for extensions"))
     }
@@ -448,14 +488,19 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
                                 presentActionPopup action: WKWebExtension.Action,
                                 for context: WKWebExtensionContext,
                                 completionHandler: @escaping ((any Error)?) -> Void) {
-        completionHandler(WebExtensionPresenter.presentPopup(of: action)
-                          ? nil : WebExtensionHost.refusal("The popup could not be shown"))
+        if WebExtensionPresenter.presentPopup(of: action) {
+            completionHandler(nil)
+            return
+        }
+        report(context.uniqueIdentifier, "popup could not be shown")
+        completionHandler(WebExtensionHost.refusal("The popup could not be shown"))
     }
 
     func webExtensionController(_ controller: WKWebExtensionController,
                                 openNewWindowUsing configuration: WKWebExtension.WindowConfiguration,
                                 for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping ((any WKWebExtensionWindow)?, (any Error)?) -> Void) {
+        report(extensionContext.uniqueIdentifier, "asked for a window, which this browser does not open")
         completionHandler(nil, WebExtensionHost.refusal("This browser does not open windows for extensions"))
     }
 
@@ -472,6 +517,41 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
                                 for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping ((any Error)?) -> Void) {
         completionHandler(WebExtensionHost.refusal("Native messaging is not available"))
+    }
+}
+
+// MARK: WKNavigationDelegate
+//
+// Of the pages shown over the app only: one that fails to load is reported,
+// since the host app sees nothing of it otherwise.
+
+@available(iOS 18.4, macOS 15.4, *)
+extension WebExtensionHost: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+                 withError error: any Error) {
+        pageFailed(webView, error: error as NSError)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+        pageFailed(webView, error: error as NSError)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard let extensionId = pages.object(forKey: webView) as String? else {
+            return
+        }
+        report(extensionId, "page \(webView.url?.absoluteString ?? "") stopped: its web content process ended")
+    }
+
+    private func pageFailed(_ webView: WKWebView, error: NSError) {
+        // A load another one replaced did not fail.
+        guard error.code != NSURLErrorCancelled,
+              let extensionId = pages.object(forKey: webView) as String? else {
+            return
+        }
+        let url = error.userInfo[NSURLErrorFailingURLStringErrorKey] as? String
+            ?? webView.url?.absoluteString ?? ""
+        report(extensionId, "page \(url) failed to load: \(error.localizedDescription)")
     }
 }
 

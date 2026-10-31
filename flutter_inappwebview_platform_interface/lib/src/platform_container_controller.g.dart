@@ -176,6 +176,18 @@ enum PlatformContainerControllerMethod {
   ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
   ///{@endtemplate}
   removeWebExtensionData,
+
+  ///Can be used to check if the [PlatformContainerController.webExtensionProblems] method is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.webExtensionProblems.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 18.4+ ([Official API - WKWebExtensionControllerDelegate](https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate))
+  ///- macOS WKWebView 15.4+ ([Official API - WKWebExtensionControllerDelegate](https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate))
+  ///
+  ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
+  ///{@endtemplate}
+  webExtensionProblems,
 }
 
 extension _PlatformContainerControllerMethodSupported
@@ -230,6 +242,12 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.macOS,
             ].contains(platform ?? defaultTargetPlatform);
       case PlatformContainerControllerMethod.removeWebExtensionData:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
+            ].contains(platform ?? defaultTargetPlatform);
+      case PlatformContainerControllerMethod.webExtensionProblems:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
             [
               TargetPlatform.iOS,

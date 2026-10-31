@@ -22,6 +22,10 @@ class WebExtensionAttach {
   ///The extensions to load, each once per controller.
   List<WebExtensionContextSpec> contexts;
 
+  ///Whether Web Inspector may inspect the extensions' background, popups
+  ///and pages, as `WKWebView.isInspectable` lets it inspect a WebView.
+  bool inspectable;
+
   ///Whether the extensions keep their data across launches. `false` gives
   ///the WebView a controller of its own that writes nothing to disk, as an
   ///incognito WebView needs.
@@ -31,7 +35,11 @@ class WebExtensionAttach {
   ///**Officially Supported Platforms/Implementations**:
   ///- iOS WKWebView 18.4+ ([Official API - WKWebExtensionController](https://developer.apple.com/documentation/webkit/wkwebextensioncontroller))
   ///- macOS WKWebView 15.4+ ([Official API - WKWebExtensionController](https://developer.apple.com/documentation/webkit/wkwebextensioncontroller))
-  WebExtensionAttach({this.contexts = const [], this.persistent = true});
+  WebExtensionAttach({
+    this.contexts = const [],
+    this.inspectable = false,
+    this.persistent = true,
+  });
 
   ///Gets a possible [WebExtensionAttach] instance from a [Map] value.
   static WebExtensionAttach? fromMap(
@@ -52,6 +60,9 @@ class WebExtensionAttach {
         ),
       );
     }
+    if (map['inspectable'] != null) {
+      instance.inspectable = map['inspectable'];
+    }
     if (map['persistent'] != null) {
       instance.persistent = map['persistent'];
     }
@@ -62,6 +73,7 @@ class WebExtensionAttach {
   Map<String, dynamic> toMap({EnumMethod? enumMethod}) {
     return {
       "contexts": contexts.map((e) => e.toMap(enumMethod: enumMethod)).toList(),
+      "inspectable": inspectable,
       "persistent": persistent,
     };
   }
@@ -73,6 +85,6 @@ class WebExtensionAttach {
 
   @override
   String toString() {
-    return 'WebExtensionAttach{contexts: $contexts, persistent: $persistent}';
+    return 'WebExtensionAttach{contexts: $contexts, inspectable: $inspectable, persistent: $persistent}';
   }
 }

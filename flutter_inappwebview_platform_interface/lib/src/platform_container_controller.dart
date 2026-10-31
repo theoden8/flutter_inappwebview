@@ -434,6 +434,30 @@ abstract class PlatformContainerController extends PlatformInterface {
     );
   }
 
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.webExtensionProblems}
+  ///[WebSpace fork patch] What goes wrong running web extensions, as it
+  ///happens: an extension that did not load, a page or popup that could not
+  ///be shown, a page that failed to load, a tab or window an extension asked
+  ///for and was refused. Empty where web extensions are not available.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        apiName: 'WKWebExtensionControllerDelegate',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate',
+        available: '18.4',
+      ),
+      MacOSPlatform(
+        apiName: 'WKWebExtensionControllerDelegate',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate',
+        available: '15.4',
+      ),
+    ],
+  )
+  Stream<WebExtensionProblem> get webExtensionProblems => const Stream.empty();
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   bool isClassSupported({TargetPlatform? platform}) =>
       params.isClassSupported(platform: platform);

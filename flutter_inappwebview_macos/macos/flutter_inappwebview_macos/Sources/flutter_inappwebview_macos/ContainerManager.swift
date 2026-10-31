@@ -156,6 +156,18 @@ public class ContainerManager: ChannelDelegate {
             name: ContainerManager.METHOD_CHANNEL_NAME,
             binaryMessenger: plugin.registrar.messenger))
         self.plugin = plugin
+        // [WebSpace fork patch] What goes wrong running web extensions goes
+        // to Dart.
+        #if compiler(>=6.1)
+        if #available(macOS 15.4, *) {
+            Task { @MainActor [weak self] in
+                WebExtensionHost.shared.onProblem = { extensionId, message in
+                    self?.channel?.invokeMethod("onWebExtensionProblem",
+                                                arguments: ["extensionId": extensionId, "message": message])
+                }
+            }
+        }
+        #endif
     }
 
     public override func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

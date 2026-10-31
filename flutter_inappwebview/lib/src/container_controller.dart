@@ -89,6 +89,12 @@ class ContainerController {
   Future<WebExtensionReport?> inspectWebExtension(String path) =>
       platform.inspectWebExtension(path);
 
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.webExtensionProblems}
+  ///
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.webExtensionProblems.supported_platforms}
+  Stream<WebExtensionProblem> get webExtensionProblems =>
+      platform.webExtensionProblems;
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   static bool isClassSupported({TargetPlatform? platform}) =>
       PlatformContainerController.static().isClassSupported(platform: platform);

@@ -39,5 +39,13 @@ class WebExtensionAttach_ {
   ///The extensions to load, each once per controller.
   List<WebExtensionContextSpec_> contexts;
 
-  WebExtensionAttach_({this.persistent = true, this.contexts = const []});
+  ///Whether Web Inspector may inspect the extensions' background, popups
+  ///and pages, as `WKWebView.isInspectable` lets it inspect a WebView.
+  bool inspectable;
+
+  WebExtensionAttach_({
+    this.persistent = true,
+    this.contexts = const [],
+    this.inspectable = false,
+  });
 }
