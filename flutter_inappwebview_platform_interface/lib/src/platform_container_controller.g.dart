@@ -149,7 +149,7 @@ enum PlatformContainerControllerMethod {
   ///- iOS WKWebView 18.4+ ([Official API - WKWebExtensionContext.performAction / optionsPageURL](https://developer.apple.com/documentation/webkit/wkwebextensioncontext)):
   ///    - An options page opens in a sheet; a popup as WebKit's popupViewController.
   ///- macOS WKWebView 15.4+ ([Official API - WKWebExtensionContext.performAction / optionsPageURL](https://developer.apple.com/documentation/webkit/wkwebextensioncontext)):
-  ///    - An options page opens in a window of its own; a popup as WebKit's popupPopover.
+  ///    - An options page opens in a sheet over the app's window; a popup as WebKit's popupPopover.
   ///
   ///**Parameters - Officially Supported Platforms/Implementations**:
   ///- [containerId]: all platforms

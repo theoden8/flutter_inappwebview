@@ -362,7 +362,7 @@ abstract class PlatformContainerController extends PlatformInterface {
         apiUrl:
             'https://developer.apple.com/documentation/webkit/wkwebextensioncontext',
         available: '15.4',
-        note: "An options page opens in a window of its own; a popup as WebKit's popupPopover.",
+        note: "An options page opens in a sheet over the app's window; a popup as WebKit's popupPopover.",
       ),
     ],
   )

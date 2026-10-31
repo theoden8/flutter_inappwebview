@@ -13,7 +13,8 @@
 //
 //  An extension sees its container's WebViews as the tabs of one window,
 //  the last one attached active. Its options page, its action popup and
-//  the pages of its own it opens as tabs are shown natively, over the app.
+//  the pages of its own it opens as tabs are shown natively, over the app:
+//  a page as a sheet, the popup as WebKit's popover.
 //  What goes wrong running one is reported to the host app as it happens.
 //
 
@@ -660,13 +661,20 @@ enum WebExtensionPresenter {
         return top
     }
     #elseif os(macOS)
+    /// As a sheet over the app's window, as iOS presents it over the app.
     static func present(_ webView: WKWebView, title: String) -> Bool {
-        let page = NSViewController()
-        page.view = webView
-        let window = NSWindow(contentViewController: page)
-        window.title = title
-        window.setContentSize(NSSize(width: 720, height: 560))
-        PageWindows.shared.show(window)
+        guard var host = NSApp.mainWindow ?? NSApp.keyWindow else {
+            return false
+        }
+        // A page an extension opens from one of its pages goes over that one.
+        while let sheet = host.attachedSheet {
+            host = sheet
+        }
+        let sheet = NSWindow(contentViewController: PageSheet(webView: webView, title: title))
+        sheet.isReleasedWhenClosed = false
+        let room = host.contentLayoutRect.size
+        sheet.setContentSize(NSSize(width: min(720, room.width - 40), height: min(560, room.height - 20)))
+        host.beginSheet(sheet)
         return true
     }
 
@@ -682,25 +690,65 @@ enum WebExtensionPresenter {
 }
 
 #if os(macOS)
-/// Keeps each page window alive while it is open.
+/// An extension page in a sheet: a bar with the window close button, whose
+/// look and spoken name are the system's, and the extension's name; the
+/// page fills the rest. The close button answers Escape too.
 @MainActor
-private final class PageWindows: NSObject, NSWindowDelegate {
-    static let shared = PageWindows()
+private final class PageSheet: NSViewController {
+    private let webView: WKWebView
+    private let pageTitle: String
 
-    private var open: [NSWindow] = []
-
-    func show(_ window: NSWindow) {
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        open.append(window)
-        window.makeKeyAndOrderFront(nil)
+    init(webView: WKWebView, title: String) {
+        self.webView = webView
+        self.pageTitle = title
+        super.init(nibName: nil, bundle: nil)
     }
 
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else {
+    required init?(coder: NSCoder) {
+        return nil
+    }
+
+    override func loadView() {
+        let close = NSWindow.standardWindowButton(.closeButton, for: [.titled, .closable]) ?? NSButton()
+        close.target = self
+        close.action = #selector(done)
+        close.keyEquivalent = "\u{1b}"
+        let name = NSTextField(labelWithString: pageTitle)
+        name.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        name.lineBreakMode = .byTruncatingTail
+        name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let line = NSBox()
+        line.boxType = .separator
+        let root = NSView()
+        for part in [close, name, line, webView] as [NSView] {
+            part.translatesAutoresizingMaskIntoConstraints = false
+            root.addSubview(part)
+        }
+        let centered = name.centerXAnchor.constraint(equalTo: root.centerXAnchor)
+        centered.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            close.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            close.centerYAnchor.constraint(equalTo: root.topAnchor, constant: 18),
+            centered,
+            name.centerYAnchor.constraint(equalTo: close.centerYAnchor),
+            name.leadingAnchor.constraint(greaterThanOrEqualTo: close.trailingAnchor, constant: 8),
+            name.trailingAnchor.constraint(lessThanOrEqualTo: root.trailingAnchor, constant: -12),
+            line.topAnchor.constraint(equalTo: root.topAnchor, constant: 36),
+            line.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            line.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: line.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+        ])
+        view = root
+    }
+
+    @objc private func done() {
+        guard let sheet = view.window, let parent = sheet.sheetParent else {
             return
         }
-        open.removeAll { $0 === window }
+        parent.endSheet(sheet)
     }
 }
 #endif
