@@ -35,6 +35,14 @@ FlPluginRegistrar* InAppWebViewManager::registrar() const {
 
 InAppWebViewManager::~InAppWebViewManager() {
   platform_views_.clear();
+  for (auto& entry : destroy_waiters_) {
+    for (FlMethodCall* call : entry.second) {
+      g_autoptr(FlValue) result = fl_value_new_bool(true);
+      fl_method_call_respond_success(call, result, nullptr);
+      g_object_unref(call);
+    }
+  }
+  destroy_waiters_.clear();
   
   keepAliveWebViews_.clear();
   
@@ -66,6 +74,25 @@ void InAppWebViewManager::HandleMethodCallImpl(FlMethodCall* method_call) {
 
   if (strcmp(method, "createInAppWebView") == 0) {
     CreateInAppWebView(method_call);
+    return;
+  }
+
+  // [WebSpace fork patch] Answers once the view with this id has been
+  // destroyed, at once when none is live: a host that moves a process-wide
+  // proxy rule to another site's proxy waits here until the old view can
+  // send nothing more.
+  if (strcmp(method, "whenWebViewDestroyed") == 0) {
+    FlValue* args = fl_method_call_get_args(method_call);
+    std::optional<int64_t> idOpt;
+    if (fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+      idOpt = get_optional_fl_map_value<int64_t>(args, "id");
+    }
+    if (!idOpt.has_value() || platform_views_.find(idOpt.value()) == platform_views_.end()) {
+      g_autoptr(FlValue) result = fl_value_new_bool(true);
+      fl_method_call_respond_success(method_call, result, nullptr);
+      return;
+    }
+    destroy_waiters_[idOpt.value()].push_back(FL_METHOD_CALL(g_object_ref(method_call)));
     return;
   }
 
@@ -271,6 +298,21 @@ void InAppWebViewManager::DisposeWebView(int64_t texture_id) {
       return;
     }
     platform_views_.erase(it);
+  }
+  RespondDestroyed(texture_id);
+}
+
+void InAppWebViewManager::RespondDestroyed(int64_t texture_id) {
+  auto it = destroy_waiters_.find(texture_id);
+  if (it == destroy_waiters_.end()) {
+    return;
+  }
+  std::vector<FlMethodCall*> waiters = std::move(it->second);
+  destroy_waiters_.erase(it);
+  for (FlMethodCall* call : waiters) {
+    g_autoptr(FlValue) result = fl_value_new_bool(true);
+    fl_method_call_respond_success(call, result, nullptr);
+    g_object_unref(call);
   }
 }
 

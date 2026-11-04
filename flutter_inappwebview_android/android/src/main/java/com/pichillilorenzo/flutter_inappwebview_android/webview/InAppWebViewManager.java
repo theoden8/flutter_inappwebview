@@ -19,6 +19,7 @@ import com.pichillilorenzo.flutter_inappwebview_android.InAppWebViewFlutterPlugi
 import com.pichillilorenzo.flutter_inappwebview_android.plugin_scripts_js.JavaScriptBridgeJS;
 import com.pichillilorenzo.flutter_inappwebview_android.types.ChannelDelegateImpl;
 import com.pichillilorenzo.flutter_inappwebview_android.webview.in_app_webview.FlutterWebView;
+import com.pichillilorenzo.flutter_inappwebview_android.webview.in_app_webview.InAppWebView;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -50,6 +51,16 @@ public class InAppWebViewManager extends ChannelDelegateImpl {
   @Override
   public void onMethodCall(@NonNull MethodCall call, @NonNull final MethodChannel.Result result) {
     switch (call.method) {
+      case "whenWebViewDestroyed": {
+        // [WebSpace fork patch] See InAppWebView.whenDestroyed.
+        Object id = call.argument("id");
+        if (id == null) {
+          result.success(true);
+        } else {
+          InAppWebView.whenDestroyed(id, result);
+        }
+        break;
+      }
       case "getDefaultUserAgent":
         if (plugin != null) {
           result.success(WebSettings.getDefaultUserAgent(plugin.applicationContext));

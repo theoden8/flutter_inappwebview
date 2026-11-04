@@ -143,6 +143,31 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
     return view;
   }
 
+  // [WebSpace fork patch] dispose() keeps the view loading until it has
+  // loaded about:blank, and only then destroys it, so a page or an icon it
+  // fetches meanwhile still goes out. A host that must know the view sends
+  // nothing more (before it moves a process-wide proxy rule to another
+  // site's proxy) waits for the destroy through whenDestroyed. Main thread
+  // only: dispose(), destroy() and the manager's method calls all run there.
+  private static final java.util.Set<Object> DESTROYING = new java.util.HashSet<>();
+  private static final java.util.Map<Object, List<MethodChannel.Result>> DESTROY_WAITERS =
+      new java.util.HashMap<>();
+
+  // Answers result once the view built with id has been destroyed, at once
+  // when no such view is live or being disposed.
+  public static void whenDestroyed(@NonNull Object id, @NonNull MethodChannel.Result result) {
+    if (!DESTROYING.contains(id) && findById(id) == null) {
+      result.success(true);
+      return;
+    }
+    List<MethodChannel.Result> waiters = DESTROY_WAITERS.get(id);
+    if (waiters == null) {
+      waiters = new ArrayList<>();
+      DESTROY_WAITERS.put(id, waiters);
+    }
+    waiters.add(result);
+  }
+
   @Nullable
   public InAppWebViewFlutterPlugin plugin;
   @Nullable
@@ -2264,6 +2289,7 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
   @Override
   public void dispose() {
     if (id != null) {
+      DESTROYING.add(id);
       LIVE_WEB_VIEWS.remove(id);
     }
     if (channelDelegate != null) {
@@ -2415,5 +2441,15 @@ final public class InAppWebView extends InputAwareWebView implements InAppWebVie
   @Override
   public void destroy() {
     super.destroy();
+    // [WebSpace fork patch] See whenDestroyed.
+    if (id != null) {
+      DESTROYING.remove(id);
+      List<MethodChannel.Result> waiters = DESTROY_WAITERS.remove(id);
+      if (waiters != null) {
+        for (MethodChannel.Result waiter : waiters) {
+          waiter.success(true);
+        }
+      }
+    }
   }
 }

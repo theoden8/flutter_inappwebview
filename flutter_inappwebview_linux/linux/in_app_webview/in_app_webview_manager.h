@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "../types/url_request.h"
 #include "../types/web_view_transport.h"
@@ -57,6 +58,10 @@ class InAppWebViewManager {
   FlTextureRegistrar* texture_registrar_ = nullptr;
   FlBinaryMessenger* messenger_ = nullptr;
 
+  // [WebSpace fork patch] Calls to whenWebViewDestroyed waiting for the view
+  // with this texture id to be destroyed, each held with a ref.
+  std::map<int64_t, std::vector<FlMethodCall*>> destroy_waiters_;
+
   // Map of texture id to CustomPlatformView instance
   std::map<int64_t, std::unique_ptr<CustomPlatformView>> platform_views_;
 
@@ -78,6 +83,9 @@ class InAppWebViewManager {
   void HandleMethodCallImpl(FlMethodCall* method_call);
   void CreateInAppWebView(FlMethodCall* method_call);
   void DisposeWebView(int64_t texture_id);
+  // [WebSpace fork patch] Answers the waiters WhenWebViewDestroyed parked
+  // for the view with this id.
+  void RespondDestroyed(int64_t texture_id);
   void ClearAllCache(FlMethodCall* method_call, bool includeDiskFiles);
 
  public:
