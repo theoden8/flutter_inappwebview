@@ -164,6 +164,14 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
         set {
             super.frame = newValue
             
+            // [WebSpace fork patch] While the refresh control refreshes, UIKit holds its
+            // height in contentInset.top and takes it back off when the refresh ends.
+            // Zeroed in between, the inset ended at minus that height: the page's top
+            // rested about 60pt down, shown only while dragged, until the next resize
+            // (integration_test/ios_refresh_inset_test.dart in webspace_app).
+            if refreshInsetInEffect {
+                return
+            }
             scrollView.contentInset = .zero
             if #available(iOS 11, *) {
                 // Above iOS 11, adjust contentInset to compensate the adjustedContentInset so the sum will
@@ -177,9 +185,18 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
         }
     }
     
+    // [WebSpace fork patch] The refresh control's share of contentInset, which
+    // UIKit takes back when it ends; nothing here may rewrite the inset meanwhile.
+    private var refreshInsetInEffect: Bool {
+        return pullToRefreshControl?.isRefreshing == true
+    }
+    
     // Fix https://github.com/pichillilorenzo/flutter_inappwebview/issues/1947
     private var _scrollViewContentInsetAdjusted = false
     @objc func keyboardWillShow(notification: NSNotification) {
+        if refreshInsetInEffect {
+            return
+        }
         // UIResponder.keyboardWillShowNotification will be fired also
         // when changing focus between HTML inputs with the keyboard already open
         if (scrollView.adjustedContentInset != .zero) {
