@@ -276,8 +276,13 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
             #else
             let loadsHere = true
             #endif
+            // WebKit's NSErrors read as Objective-C objects: converting each
+            // to Swift's `any Error` ended the app on a 2014 Intel Mac
+            // (macOS 15.7 through OpenCore), messaging the error's code.
+            let errors = (webExtension.value(forKey: "errors") as? [NSError] ?? [])
+                .map { $0.localizedDescription }
             return [
-                "errors": webExtension.errors.map { $0.localizedDescription },
+                "errors": errors,
                 "hasOptionsPage": webExtension.hasOptionsPage,
                 "hasAction": hasAction,
                 "loadsHere": loadsHere,
