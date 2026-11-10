@@ -300,7 +300,8 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
     /// Shows [page] of extension [extensionId], run as [spec] runs it in
     /// [containerId]. [spec] is the container's whole set, as its WebViews
     /// take it: a context it does not name is unloaded. False when the
-    /// extension is not loaded there or has no such page.
+    /// extension is not loaded there or has no such page, and for its
+    /// action when no WebView of the container is open to act on.
     func openPage(_ page: WebExtensionPage, extensionId: String, spec: WebExtensionAttachSpec,
                   containerId: String, completion: @escaping (Bool) -> Void) {
         guard spec.persistent,
@@ -325,7 +326,15 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
             case .options:
                 completion(self.presentOptions(of: context))
             case .action:
-                context.performAction(for: self.windows[ObjectIdentifier(controller)]?.active)
+                // An action acts on the active tab, as a toolbar button does;
+                // with none, an extension asking which tab it is on gets
+                // nothing, and some then never answer their own popup.
+                guard let tab = self.windows[ObjectIdentifier(controller)]?.active else {
+                    self.report(extensionId, "has no open tab of its site to act on")
+                    completion(false)
+                    return
+                }
+                context.performAction(for: tab)
                 completion(true)
             }
         }

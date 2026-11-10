@@ -346,7 +346,9 @@ abstract class PlatformContainerController extends PlatformInterface {
   ///as its tabs, the last one attached active.
   ///
   ///Returns `false` when the extension is not loaded there, has no such
-  ///page, or [attach] is not persistent.
+  ///page, or [attach] is not persistent, and for
+  ///[WebExtensionPage.ACTION] when no WebView of the container is open for
+  ///the action to act on.
   ///{@endtemplate}
   @SupportedPlatforms(
     platforms: [
