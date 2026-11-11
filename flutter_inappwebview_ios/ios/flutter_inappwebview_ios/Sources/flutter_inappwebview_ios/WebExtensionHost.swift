@@ -230,6 +230,22 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         return webExtension
     }
 
+    /// Lets go of [containerId]'s controller, its contexts unloaded, so
+    /// nothing of the host keeps the container's store in use while the
+    /// container is deleted; its next WebView makes a new one. Kept while a
+    /// WebView of the container is still one of its tabs.
+    func release(container containerId: String) {
+        guard let controller = controllers[containerId],
+              windows[ObjectIdentifier(controller)]?.members.isEmpty ?? true else {
+            return
+        }
+        controllers.removeValue(forKey: containerId)
+        windows[ObjectIdentifier(controller)] = nil
+        for context in controller.extensionContexts {
+            unload(context, from: controller)
+        }
+    }
+
     /// Removes what every extension stored for [containerId], as deleting
     /// the container removes the site's own data.
     func removeData(forContainer containerId: String) {

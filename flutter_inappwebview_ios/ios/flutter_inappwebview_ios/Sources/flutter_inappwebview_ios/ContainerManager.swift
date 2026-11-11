@@ -309,6 +309,16 @@ public class ContainerManager: ChannelDelegate {
         // doesn't fix that race (callers needing a wipe while a
         // WebView is bound should use clearContainerData), but it
         // removes us as a reason for the silent no-op.
+        // [WebSpace fork patch] The container's extension controller keeps
+        // its store as the default for the extensions' own pages; with none
+        // of the container's WebViews left, it lets go of it too.
+        #if compiler(>=6.1)
+        if #available(iOS 18.4, *) {
+            MainActor.assumeIsolated {
+                WebExtensionHost.shared.release(container: containerId)
+            }
+        }
+        #endif
         // Weak: holding the store would itself keep it in use.
         weak var evicted = ContainerManager.evictDataStore(forContainer: containerId)
         let uuid = containerIdToUUID(containerId)

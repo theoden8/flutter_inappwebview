@@ -288,6 +288,16 @@ public class ContainerManager: ChannelDelegate {
     private func deleteContainer(_ containerId: String, result: @escaping FlutterResult) {
         // Drop our cached wrapper before WebKit tries to free the
         // underlying store — see iOS sibling for the rationale.
+        // [WebSpace fork patch] The container's extension controller keeps
+        // its store as the default for the extensions' own pages; with none
+        // of the container's WebViews left, it lets go of it too.
+        #if compiler(>=6.1)
+        if #available(macOS 15.4, *) {
+            MainActor.assumeIsolated {
+                WebExtensionHost.shared.release(container: containerId)
+            }
+        }
+        #endif
         // Weak: holding the store would itself keep it in use.
         weak var evicted = ContainerManager.evictDataStore(forContainer: containerId)
         let uuid = containerIdToUUID(containerId)
