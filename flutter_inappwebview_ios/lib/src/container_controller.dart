@@ -72,6 +72,8 @@ class IOSContainerController extends PlatformContainerController
   // channel, and the later one receives every call.
   static final StreamController<WebExtensionProblem> _webExtensionProblems =
       StreamController.broadcast();
+  static Future<bool> Function(WebExtensionTabRequest request)?
+  _webExtensionTabHandler;
 
   Future<dynamic> _handleMethod(MethodCall call) async {
     switch (call.method) {
@@ -82,12 +84,26 @@ class IOSContainerController extends PlatformContainerController
         if (problem != null) {
           _webExtensionProblems.add(problem);
         }
+      case 'onWebExtensionTabRequest':
+        final request = WebExtensionTabRequest.fromMap(
+          (call.arguments as Map?)?.cast<String, dynamic>(),
+        );
+        final handler = _webExtensionTabHandler;
+        if (request == null || handler == null) return false;
+        return handler(request);
     }
   }
 
   @override
   Stream<WebExtensionProblem> get webExtensionProblems =>
       _webExtensionProblems.stream;
+
+  @override
+  void setWebExtensionTabHandler(
+    Future<bool> Function(WebExtensionTabRequest request)? handler,
+  ) {
+    _webExtensionTabHandler = handler;
+  }
 
   @override
   Future<List<String>> getAllContainerNames() async {

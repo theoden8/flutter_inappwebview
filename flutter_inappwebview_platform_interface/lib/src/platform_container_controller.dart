@@ -460,6 +460,35 @@ abstract class PlatformContainerController extends PlatformInterface {
   )
   Stream<WebExtensionProblem> get webExtensionProblems => const Stream.empty();
 
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.setWebExtensionTabHandler}
+  ///[WebSpace fork patch] Who answers a web extension's request for a tab at
+  ///a web page: [handler] opens the page as the app chooses and returns
+  ///`true`, or returns `false` and the extension is told it failed. With no
+  ///handler every such request is refused. A tab at one of the extension's
+  ///own pages opens over the app without asking.
+  ///{@endtemplate}
+  @SupportedPlatforms(
+    platforms: [
+      IOSPlatform(
+        apiName:
+            'WKWebExtensionControllerDelegate.webExtensionController(_:openNewTabUsing:for:completionHandler:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate',
+        available: '18.4',
+      ),
+      MacOSPlatform(
+        apiName:
+            'WKWebExtensionControllerDelegate.webExtensionController(_:openNewTabUsing:for:completionHandler:)',
+        apiUrl:
+            'https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate',
+        available: '15.4',
+      ),
+    ],
+  )
+  void setWebExtensionTabHandler(
+    Future<bool> Function(WebExtensionTabRequest request)? handler,
+  ) {}
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   bool isClassSupported({TargetPlatform? platform}) =>
       params.isClassSupported(platform: platform);

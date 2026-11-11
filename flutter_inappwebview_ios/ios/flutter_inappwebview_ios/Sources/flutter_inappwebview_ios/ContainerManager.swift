@@ -180,6 +180,15 @@ public class ContainerManager: ChannelDelegate {
                     self?.channel?.invokeMethod("onWebExtensionProblem",
                                                 arguments: ["extensionId": extensionId, "message": message])
                 }
+                WebExtensionHost.shared.onTabRequest = { request, answer in
+                    guard let channel = self?.channel else {
+                        answer(false)
+                        return
+                    }
+                    channel.invokeMethod("onWebExtensionTabRequest", arguments: request) { opened in
+                        answer((opened as? Bool) ?? false)
+                    }
+                }
             }
         }
         #endif

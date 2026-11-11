@@ -108,6 +108,12 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
     /// container channel sends each to Dart.
     var onProblem: ((_ extensionId: String, _ message: String) -> Void)?
 
+    /// Where the host app answers an extension's request for a tab at a web
+    /// page: the container channel asks Dart, which opens the page as it
+    /// chooses and answers whether it did. Unset, every such request is
+    /// refused.
+    var onTabRequest: ((_ request: [String: Any], _ answer: @escaping (Bool) -> Void) -> Void)?
+
     private func report(_ extensionId: String, _ message: String) {
         print("[WebSpace] web extension \(extensionId) \(message)")
         onProblem?(extensionId, message)
@@ -474,22 +480,38 @@ final class WebExtensionHost: NSObject, WKWebExtensionControllerDelegate {
         return windows[ObjectIdentifier(controller)]
     }
 
-    /// Only a page of the extension's own opens, shown as its options page
-    /// is; a tab on the web would run outside the host app's sites.
+    /// A page of the extension's own opens as its options page is. A web
+    /// page goes to the host app, which opens it only as a page of the site
+    /// whose container the extension runs in; a tab anywhere else would run
+    /// outside the host app's sites.
     func webExtensionController(_ controller: WKWebExtensionController,
                                 openNewTabUsing configuration: WKWebExtension.TabConfiguration,
                                 for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping ((any WKWebExtensionTab)?, (any Error)?) -> Void) {
-        if let url = configuration.url, isPage(url, of: extensionContext) {
-            if presentPage(url, of: extensionContext) {
-                completionHandler(nil, nil)
-                return
-            }
-        } else {
-            report(extensionContext.uniqueIdentifier,
-                   "asked for a tab at \(configuration.url?.absoluteString ?? "no address"), which only opens for its own pages")
+        let extensionId = extensionContext.uniqueIdentifier
+        let refused = WebExtensionHost.refusal("This browser does not open tabs for extensions")
+        guard let url = configuration.url else {
+            report(extensionId, "asked for a tab at no address")
+            completionHandler(nil, refused)
+            return
         }
-        completionHandler(nil, WebExtensionHost.refusal("This browser does not open tabs for extensions"))
+        if isPage(url, of: extensionContext) {
+            completionHandler(nil, presentPage(url, of: extensionContext) ? nil : refused)
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let containerId = controllers.first(where: { $0.value === controller })?.key,
+              let ask = onTabRequest else {
+            report(extensionId, "asked for a tab at \(url.absoluteString), which only opens for its own pages and its site's")
+            completionHandler(nil, refused)
+            return
+        }
+        ask(["containerId": containerId, "extensionId": extensionId, "url": url.absoluteString]) { [weak self] opened in
+            if !opened {
+                self?.report(extensionId, "asked for a tab at \(url.absoluteString), which is not a page of its site")
+            }
+            completionHandler(nil, opened ? nil : refused)
+        }
     }
 
     func webExtensionController(_ controller: WKWebExtensionController,

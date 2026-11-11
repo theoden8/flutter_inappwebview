@@ -95,6 +95,13 @@ class ContainerController {
   Stream<WebExtensionProblem> get webExtensionProblems =>
       platform.webExtensionProblems;
 
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.setWebExtensionTabHandler}
+  ///
+  ///{@macro flutter_inappwebview_platform_interface.PlatformContainerController.setWebExtensionTabHandler.supported_platforms}
+  void setWebExtensionTabHandler(
+    Future<bool> Function(WebExtensionTabRequest request)? handler,
+  ) => platform.setWebExtensionTabHandler(handler);
+
   ///{@macro flutter_inappwebview_platform_interface.PlatformContainerControllerCreationParams.isClassSupported}
   static bool isClassSupported({TargetPlatform? platform}) =>
       PlatformContainerController.static().isClassSupported(platform: platform);

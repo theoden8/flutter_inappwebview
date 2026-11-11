@@ -188,6 +188,21 @@ enum PlatformContainerControllerMethod {
   ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
   ///{@endtemplate}
   webExtensionProblems,
+
+  ///Can be used to check if the [PlatformContainerController.setWebExtensionTabHandler] method is supported at runtime.
+  ///
+  ///{@template flutter_inappwebview_platform_interface.PlatformContainerController.setWebExtensionTabHandler.supported_platforms}
+  ///
+  ///**Officially Supported Platforms/Implementations**:
+  ///- iOS WKWebView 18.4+ ([Official API - WKWebExtensionControllerDelegate.webExtensionController(_:openNewTabUsing:for:completionHandler:)](https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate))
+  ///- macOS WKWebView 15.4+ ([Official API - WKWebExtensionControllerDelegate.webExtensionController(_:openNewTabUsing:for:completionHandler:)](https://developer.apple.com/documentation/webkit/wkwebextensioncontrollerdelegate))
+  ///
+  ///**Parameters - Officially Supported Platforms/Implementations**:
+  ///- [handler]: all platforms
+  ///
+  ///Use the [PlatformContainerController.isMethodSupported] method to check if this method is supported at runtime.
+  ///{@endtemplate}
+  setWebExtensionTabHandler,
 }
 
 extension _PlatformContainerControllerMethodSupported
@@ -248,6 +263,12 @@ extension _PlatformContainerControllerMethodSupported
               TargetPlatform.macOS,
             ].contains(platform ?? defaultTargetPlatform);
       case PlatformContainerControllerMethod.webExtensionProblems:
+        return ((kIsWeb && platform != null) || !kIsWeb) &&
+            [
+              TargetPlatform.iOS,
+              TargetPlatform.macOS,
+            ].contains(platform ?? defaultTargetPlatform);
+      case PlatformContainerControllerMethod.setWebExtensionTabHandler:
         return ((kIsWeb && platform != null) || !kIsWeb) &&
             [
               TargetPlatform.iOS,
