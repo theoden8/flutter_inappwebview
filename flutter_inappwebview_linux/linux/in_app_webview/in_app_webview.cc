@@ -476,7 +476,7 @@ InAppWebView::~InAppWebView() {
     if (current_buffer_ != nullptr && wpe_view_ != nullptr) {
       wpe_view_buffer_released(wpe_view_, current_buffer_);
     }
-    current_buffer_ = nullptr;
+    g_clear_object(&current_buffer_);
     current_buffer_width_ = 0;
     current_buffer_height_ = 0;
   }
@@ -1410,9 +1410,10 @@ void InAppWebView::OnWpePlatformBufferRendered(WPEBuffer* buffer) {
       debugLog("ERROR: No rendering method succeeded!");
     }
     
-    // Store reference to current buffer - we keep it until the NEXT frame arrives
-    // This ensures the EGL image's backing DMA-BUF memory stays valid
-    current_buffer_ = buffer;
+    // Kept until the NEXT frame arrives, with a reference of our own: WebKit
+    // drops its last one once the next frame replaces this one, or sooner when
+    // it destroys the buffer (a resize, a new web process).
+    current_buffer_ = WPE_BUFFER(g_object_ref(buffer));
   }
   
   // The consumer moves to the new frame before WebKit gets the previous buffer back
@@ -1421,8 +1422,12 @@ void InAppWebView::OnWpePlatformBufferRendered(WPEBuffer* buffer) {
     on_frame_available_();
   }
   
-  if (previous_buffer != nullptr && wpe_view_ != nullptr && WPE_IS_BUFFER(previous_buffer)) {
-    wpe_view_buffer_released(wpe_view_, previous_buffer);
+  if (previous_buffer != nullptr) {
+    // WebKit ignores the release of a buffer it no longer tracks.
+    if (wpe_view_ != nullptr) {
+      wpe_view_buffer_released(wpe_view_, previous_buffer);
+    }
+    g_object_unref(previous_buffer);
   }
 }
 

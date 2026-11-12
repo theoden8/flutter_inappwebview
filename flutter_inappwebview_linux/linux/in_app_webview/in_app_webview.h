@@ -511,7 +511,7 @@ class InAppWebView {
   WPEToplevel* wpe_toplevel_ = nullptr;   // From wpe_view_get_toplevel, not owned
   
   // Buffer rendering for WPEPlatform
-  WPEBuffer* current_buffer_ = nullptr;   // Current frame buffer (borrowed, not owned)
+  WPEBuffer* current_buffer_ = nullptr;   // Current frame buffer (a reference)
   bool current_buffer_zero_copy_ = false; // current_buffer_ is a DMA-BUF the consumer binds
   std::atomic<bool> zero_copy_failed_{false};
   // Cleared in the destructor; a frame resent from an idle callback checks it there.
