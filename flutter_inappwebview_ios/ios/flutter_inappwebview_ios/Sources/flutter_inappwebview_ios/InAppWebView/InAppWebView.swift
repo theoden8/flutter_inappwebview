@@ -715,6 +715,9 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 if settings.useOnLoadResource {
                     configuration.userContentController.addPluginScript(OnLoadResourceJS.ON_LOAD_RESOURCE_JS_PLUGIN_SCRIPT(allowedOriginRules: pluginScriptsOriginAllowList, forMainFrameOnly: pluginScriptsForMainFrameOnly))
                 }
+                if settings.disableLongPressContextMenuOnLinks {
+                    configuration.userContentController.addPluginScript(DisableLinkCalloutJS.DISABLE_LINK_CALLOUT_JS_PLUGIN_SCRIPT(allowedOriginRules: pluginScriptsOriginAllowList))
+                }
                 if !settings.supportZoom {
                     configuration.userContentController.addPluginScript(SupportZoomJS.NOT_SUPPORT_ZOOM_JS_PLUGIN_SCRIPT(allowedOriginRules: pluginScriptsOriginAllowList))
                 } else if settings.enableViewportScale {
@@ -1293,6 +1296,21 @@ public class InAppWebView: WKWebView, UIScrollViewDelegate, WKUIDelegate,
                 if javaScriptBridgeEnabled {
                     configuration.userContentController.addPluginScript(EnableViewportScaleJS.ENABLE_VIEWPORT_SCALE_JS_PLUGIN_SCRIPT(allowedOriginRules: newSettings.pluginScriptsOriginAllowList))
                 }
+            }
+        }
+        
+        if newSettingsMap["disableLongPressContextMenuOnLinks"] != nil && settings?.disableLongPressContextMenuOnLinks != newSettings.disableLongPressContextMenuOnLinks {
+            let group = DisableLinkCalloutJS.DISABLE_LINK_CALLOUT_JS_PLUGIN_SCRIPT_GROUP_NAME
+            if newSettings.disableLongPressContextMenuOnLinks {
+                evaluateJavaScript(DisableLinkCalloutJS.DISABLE_LINK_CALLOUT_JS_SOURCE)
+                if javaScriptBridgeEnabled {
+                    configuration.userContentController.addPluginScript(DisableLinkCalloutJS.DISABLE_LINK_CALLOUT_JS_PLUGIN_SCRIPT(allowedOriginRules: newSettings.pluginScriptsOriginAllowList))
+                }
+            } else {
+                if configuration.userContentController.containsPluginScript(with: group) {
+                    configuration.userContentController.removePluginScripts(with: group, shouldAddPreviousScripts: false)
+                }
+                evaluateJavaScript(DisableLinkCalloutJS.ENABLE_LINK_CALLOUT_JS_SOURCE)
             }
         }
         
